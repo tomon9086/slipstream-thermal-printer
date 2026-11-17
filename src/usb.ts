@@ -5,6 +5,15 @@ export interface PrinterOutEndpoint {
   timeout: number;
   transfer(data: Buffer, callback: (error?: Error | null, actual?: number) => void): unknown;
 }
+export interface PrinterInEndpoint {
+  direction: 'in';
+  timeout: number;
+  transfer(length: number, callback: (error?: Error | null, data?: Buffer) => void): unknown;
+}
+export interface PrinterIO {
+  write(payload: Buffer): Promise<void>;
+  read(timeoutMs?: number): Promise<Buffer>;
+}
 export interface PrinterInterface {
   claim(): void;
   release(callback: (error?: Error) => void): void;
@@ -31,15 +40,25 @@ function isOutEndpoint(endpoint: unknown): endpoint is PrinterOutEndpoint {
     && 'transfer' in endpoint && typeof endpoint.transfer === 'function';
 }
 
-export async function sendToPrinter(payload: Buffer | null, {
+export async function sendToPrinter(payload: Buffer | null, options: SendOptions = {}): Promise<void> {
+  if (!options.statusOnly && (!Buffer.isBuffer(payload) || payload.length === 0)) {
+    throw new Error('Print payload must be a non-empty Buffer');
+  }
+  await withPrinter(async io => {
+    if (options.statusOnly) return;
+    await io.write(payload!);
+    (options.log ?? console.log)(`USB accepted ${payload!.length}/${payload!.length} bytes`);
+    (options.log ?? console.log)('Print data sent; check the physical receipt.');
+  }, options);
+}
+
+// Keeps a single claimed interface open for a sequence of requests and responses.
+export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
   statusOnly = false,
   ignorePaperStatus = false,
   findDevice,
   log = console.log,
-}: SendOptions = {}): Promise<void> {
-  if (!statusOnly && (!Buffer.isBuffer(payload) || payload.length === 0)) {
-    throw new Error('Print payload must be a non-empty Buffer');
-  }
+}: SendOptions = {}): Promise<T> {
   const find = findDevice ?? (await import('usb')).findByIds;
   const device: PrinterDevice | undefined = find(0x0619, 0x0123);
   if (!device) throw new Error('SII 0619:0123 not found; check power and USB connection');
@@ -72,37 +91,56 @@ export async function sendToPrinter(payload: Buffer | null, {
         throw new Error('Unexpected USB status response length');
       }
       log(`USB printer status: 0x${status[0].toString(16).padStart(2, '0')}`);
-      if (statusOnly) return;
-      if (!(status[0] & 0x08)) throw new Error('Printer reports an error; no print sent');
-      if ((status[0] & 0x20) && !ignorePaperStatus) {
+      if (!statusOnly && !(status[0] & 0x08)) throw new Error('Printer reports an error; no print sent');
+      if (!statusOnly && (status[0] & 0x20) && !ignorePaperStatus) {
         throw new Error('USB paper-status bit 0x20 is set; no print sent. This does not '
           + 'confirm paper empty on this model. Check paper, then use --ignore-paper-status');
       }
     }
-    if (!payload) throw new Error('No print payload');
-    const endpoint = iface.endpoint(0x01);
-    if (!isOutEndpoint(endpoint)) throw new Error('Bulk OUT 0x01 missing');
-    endpoint.timeout = 15000;
-    // Bound transfers below the observed 16KiB receive buffer. No retries, including
-    // after a short transfer: some bytes may already have printed.
-    let accepted = 0;
-    for (let offset = 0; offset < payload.length; offset += 4096) {
-      const chunk = payload.subarray(offset, offset + 4096);
-      await new Promise<void>((resolve, reject) => {
-        endpoint.transfer(chunk, (error, actual) => {
-          if (error || actual !== chunk.length) {
-            reject(new Error(`USB transfer incomplete (${accepted} bytes previously accepted, `
-              + `${actual ?? 'unknown'}/${chunk.length} in this chunk). Inspect receipt before retrying`,
-            error ? { cause: error } : undefined));
-          } else {
-            accepted += actual;
-            resolve();
-          }
+    const claimedInterface = iface;
+    const io: PrinterIO = {
+      async write(payload) {
+        if (!Buffer.isBuffer(payload) || payload.length === 0) throw new Error('Empty USB write');
+        const endpoint = claimedInterface.endpoint(0x01);
+        if (!isOutEndpoint(endpoint)) throw new Error('Bulk OUT 0x01 missing');
+        endpoint.timeout = 15000;
+        // Bound transfers below the observed 16KiB receive buffer. No retries, including
+        // after a short transfer: some bytes may already have printed.
+        let accepted = 0;
+        for (let offset = 0; offset < payload.length; offset += 4096) {
+          const chunk = payload.subarray(offset, offset + 4096);
+          await new Promise<void>((resolve, reject) => {
+            endpoint.transfer(chunk, (error, actual) => {
+              if (error || actual !== chunk.length) {
+                reject(new Error(`USB transfer incomplete (${accepted} bytes previously accepted, `
+                  + `${actual ?? 'unknown'}/${chunk.length} in this chunk). Inspect receipt before retrying`,
+                error ? { cause: error } : undefined));
+              } else {
+                accepted += actual;
+                resolve();
+              }
+            });
+          });
+        }
+      },
+      async read(timeoutMs = 2000) {
+        const candidate = claimedInterface.endpoint(0x82);
+        if (typeof candidate !== 'object' || candidate === null || !('direction' in candidate)
+          || candidate.direction !== 'in' || !('transfer' in candidate)
+          || typeof candidate.transfer !== 'function') throw new Error('Bulk IN 0x82 missing');
+        const endpoint = candidate as PrinterInEndpoint;
+        endpoint.timeout = Math.max(1, Math.ceil(timeoutMs));
+        return new Promise<Buffer>((resolve, reject) => {
+          // One maximum packet, so an exact 64-byte reply fragment can complete.
+          endpoint.transfer(64, (error, data) => {
+            if (error) reject(error);
+            else if (!Buffer.isBuffer(data) || data.length === 0) reject(new Error('Empty USB response'));
+            else resolve(data);
+          });
         });
-      });
-    }
-    log(`USB accepted ${accepted}/${payload.length} bytes`);
-    log('Print data sent; check the physical receipt.');
+      },
+    };
+    return await operation(io);
   } catch (error) {
     failure = error;
     if (error instanceof Error && (('code' in error && error.code === 'LIBUSB_ERROR_ACCESS')

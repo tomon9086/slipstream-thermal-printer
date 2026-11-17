@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendToPrinter } from '../src/usb.ts';
-import type { PrinterDevice, PrinterInterface, PrinterOutEndpoint, SendOptions, UsbError } from '../src/usb.ts';
+import { sendToPrinter, withPrinter } from '../src/usb.ts';
+import type { PrinterDevice, PrinterInterface, PrinterOutEndpoint, PrinterInEndpoint, SendOptions, UsbError } from '../src/usb.ts';
 
 interface PrinterFixtureOptions {
   status?: Buffer;
@@ -10,9 +10,11 @@ interface PrinterFixtureOptions {
   failChunk?: number;
   claimError?: Error;
   releaseError?: Error;
+  inData?: Buffer;
+  inError?: Error;
 }
 function printer({ status = Buffer.from([0x18]), statusError, short = false,
-  failChunk, claimError, releaseError }: PrinterFixtureOptions = {}) {
+  failChunk, claimError, releaseError, inData, inError }: PrinterFixtureOptions = {}) {
   const events: string[] = [];
   const chunks: Buffer[] = [];
   const endpoint: PrinterOutEndpoint = {
@@ -24,10 +26,17 @@ function printer({ status = Buffer.from([0x18]), statusError, short = false,
         short ? data.length - 1 : data.length);
     },
   };
+  const incoming: PrinterInEndpoint = {
+    direction: 'in', timeout: 0,
+    transfer(length, callback) { assert.equal(length, 64); callback(inError, inData); },
+  };
   const iface: PrinterInterface = {
     claim() { events.push('claim'); if (claimError) throw claimError; },
     release(callback) { events.push('release'); callback(releaseError); },
-    endpoint(address) { assert.equal(address, 1); return endpoint; },
+    endpoint(address) {
+      assert.ok(address === 1 || address === 0x82);
+      return address === 1 ? endpoint : incoming;
+    },
   };
   const device: PrinterDevice = {
     timeout: 0,
@@ -43,7 +52,7 @@ function printer({ status = Buffer.from([0x18]), statusError, short = false,
     findDevice(vid, pid) { assert.deepEqual([vid, pid], [0x0619, 0x0123]); return device; },
     log() {},
   };
-  return { events, chunks, endpoint, options };
+  return { events, chunks, endpoint, incoming, options };
 }
 
 test('status-only claims, reads, and closes without sending on 0x38', async () => {
@@ -126,4 +135,24 @@ test('cleanup failure is reported and device still closes', async () => {
 test('missing device and empty payload fail before any transfer', async () => {
   await assert.rejects(sendToPrinter(Buffer.from('x'), { findDevice: () => undefined }), /not found/);
   await assert.rejects(sendToPrinter(Buffer.alloc(0)), /non-empty Buffer/);
+});
+
+test('bidirectional session reuses one claim and applies finite IN timeout', async () => {
+  const p = printer({ inData: Buffer.from([0xa8]) });
+  const response = await withPrinter(async io => {
+    await io.write(Buffer.from([0x1d, 0x72, 8]));
+    return io.read(1234);
+  }, p.options);
+  assert.deepEqual(response, Buffer.from([0xa8]));
+  assert.equal(p.incoming.timeout, 1234);
+  assert.deepEqual(p.events, ['open', 'claim', 'release', 'close']);
+});
+
+test('read failures and empty replies still release and close without retries', async () => {
+  for (const options of [{ inError: new Error('read timeout') }, {}]) {
+    const p = printer(options);
+    await assert.rejects(withPrinter(io => io.read(), p.options), /read timeout|Empty USB response/);
+    assert.equal(p.chunks.length, 0);
+    assert.deepEqual(p.events.slice(-2), ['release', 'close']);
+  }
 });
