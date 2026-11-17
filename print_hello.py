@@ -17,13 +17,13 @@ OUT_ENDPOINT = 0x01
 PAYLOAD = b"\x1b@Hello, World!\n\n\n\n\n\x1dV\x01"
 
 
-def main():
+def main(argv=None, payload=PAYLOAD):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--status-only", action="store_true",
                         help="Open the printer and read USB status without printing")
     parser.add_argument("--ignore-paper-status", action="store_true",
                         help="Allow printing with USB status bit 0x20 set; check paper first")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     usb = C.CDLL(ctypes.util.find_library("usb-1.0") or "libusb-1.0.so.0")
     signatures = {
         "init": ([C.POINTER(C.c_void_p)], C.c_int),
@@ -84,14 +84,14 @@ def main():
             check(result)
             raise RuntimeError(f"Unexpected USB status response length: {result}")
 
-        # Initialize, ASCII text, feed to the cutter, then partial cut.
-        data = C.create_string_buffer(PAYLOAD)
+        # Send the prepared receipt once; never automatically retry a partial send.
+        data = C.create_string_buffer(payload)
         transferred = C.c_int()
-        result = usb.libusb_bulk_transfer(handle, OUT_ENDPOINT, data, len(PAYLOAD),
-                                         C.byref(transferred), 5000)
-        print(f"USB accepted {transferred.value}/{len(PAYLOAD)} bytes", flush=True)
+        result = usb.libusb_bulk_transfer(handle, OUT_ENDPOINT, data, len(payload),
+                                         C.byref(transferred), 15000)
+        print(f"USB accepted {transferred.value}/{len(payload)} bytes", flush=True)
         check(result)
-        if transferred.value != len(PAYLOAD):
+        if transferred.value != len(payload):
             raise RuntimeError("Incomplete transfer; inspect receipt before retrying")
         print("Print data sent; check the physical receipt.", flush=True)
     finally:
