@@ -23,6 +23,8 @@ Linux環境でRP-E11へUSB接続し、ESC/POSの `Hello, World!`、紙送り、
 
 ## Node.js版のUSB送信
 
+Node 26を使用し、依存はpnpmで管理します。
+
 現在は `src/usb.js` が接続・ステータス・送信を担当し、`cli.js` から呼び出します。
 `usb` パッケージのlibusb版2.xを使用し、VID/PID・インターフェース・エンドポイントは上表と同じです。
 3.xは別のバックエンド/APIのため、本実装の依存範囲には含めていません。

@@ -6,19 +6,19 @@
 ## Node.js版
 
 ReceiptLine原稿の変換からUSB送信までNode.jsで実行できます。Pythonは不要です。
-Node.js 22以上（本環境は24）、LinuxのUSBアクセス権限が必要です。
+Node.js 26.x（本環境は26.13.1）・pnpm 12.21.0、LinuxのUSBアクセス権限が必要です。
 
 ```sh
-npm ci
+pnpm install --frozen-lockfile
 
 # 接続・ステータスだけ確認
-npm run print -- status
+pnpm run print status
 
 # ReceiptLine原稿を印刷せずに変換・プレビュー
-npm run print -- receipt examples/demo.receipt --preview /tmp/receipt.svg --output /tmp/receipt.bin
+pnpm run print receipt examples/demo.receipt --preview /tmp/receipt.svg --output /tmp/receipt.bin
 
 # 原稿から印刷
-npm run print -- receipt examples/demo.receipt --ignore-paper-status
+pnpm run print receipt examples/demo.receipt --ignore-paper-status
 ```
 
 USB権限がない場合、印刷・接続確認のコマンドは `sudo "$(command -v node)" cli.js ...` で実行できます。
@@ -26,7 +26,7 @@ USB権限がない場合、印刷・接続確認のコマンドは `sudo "$(comm
 この作業環境のNodeは以下に配置しました。PATHにNodeがない場合は先に設定します。
 
 ```sh
-export PATH="$HOME/.local/share/slipstream/node-v24.22.3-linux-x64/bin:$PATH"
+export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 ```
 
 ### CLI
@@ -70,9 +70,15 @@ ReceiptLine出力はバイナリー文字列なので `Buffer.from(data, 'latin1
 ReceiptLineのSII向けQRはライブラリ側で画像を生成します。
 `samples` は従来と同じSII内蔵QRコマンドで、両者は別の印刷経路です。
 
+pnpmは `packageManager` で12.21.0に固定し、依存バージョンは `pnpm-lock.yaml` で管理します。
+`.node-version` と `engines.node` でNode 26系を指定し、pnpmの `engineStrict` でも確認します。
+pnpm未導入の場合は [pnpmの導入手順](https://pnpm.io/installation) を参照してください。
+この環境ではNode 26のbinディレクトリーにpnpmコマンドも配置済みです。
+`pnpm-workspace.yaml` はUSBネイティブモジュールのビルドを許可しています。
+
 ### 確認結果
 
-`npm test` で15件のテストを実行できます。
+`pnpm test` で15件のテストを実行できます。
 紙ステータス・実エラーによる停止、転送分割とバイト保持、途中エラー時の再送防止、USB解放、
 Shift JIS変換、QR画像生成、透明画像の白地合成を確認しています。
 `hello` と `samples` のデータは、印刷確認済みPython版とのバイト一致を確認済みです。
