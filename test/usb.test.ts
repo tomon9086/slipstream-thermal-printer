@@ -148,11 +148,44 @@ test('bidirectional session reuses one claim and applies finite IN timeout', asy
   assert.deepEqual(p.events, ['open', 'claim', 'release', 'close']);
 });
 
-test('read failures and empty replies still release and close without retries', async () => {
+test('read failures and invalid replies still release and close without resending', async () => {
   for (const options of [{ inError: new Error('read timeout') }, {}]) {
     const p = printer(options);
-    await assert.rejects(withPrinter(io => io.read(), p.options), /read timeout|Empty USB response/);
+    await assert.rejects(withPrinter(io => io.read(), p.options), /read timeout|Invalid USB response/);
     assert.equal(p.chunks.length, 0);
     assert.deepEqual(p.events.slice(-2), ['release', 'close']);
   }
+});
+
+test('zero-length packets are skipped within the original read deadline without resending', async t => {
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const p = printer();
+  const timeouts: number[] = [];
+  p.incoming.transfer = (length, callback) => {
+    assert.equal(length, 64);
+    timeouts.push(p.incoming.timeout);
+    now += 400;
+    callback(null, timeouts.length < 3 ? Buffer.alloc(0) : Buffer.from([0x8f]));
+  };
+  assert.deepEqual(await withPrinter(io => io.read(1234), p.options), Buffer.from([0x8f]));
+  assert.deepEqual(timeouts, [1234, 834, 434]);
+  assert.equal(p.chunks.length, 0);
+  assert.deepEqual(p.events.slice(-2), ['release', 'close']);
+});
+
+test('continuous zero-length packets cannot extend the deadline and still release USB', async t => {
+  let now = 1000;
+  t.mock.method(Date, 'now', () => now);
+  const p = printer();
+  let reads = 0;
+  p.incoming.transfer = (_length, callback) => {
+    reads++;
+    now += 100;
+    callback(null, Buffer.alloc(0));
+  };
+  await assert.rejects(withPrinter(io => io.read(250), p.options), /Timed out/);
+  assert.equal(reads, 3);
+  assert.equal(p.chunks.length, 0);
+  assert.deepEqual(p.events.slice(-2), ['release', 'close']);
 });

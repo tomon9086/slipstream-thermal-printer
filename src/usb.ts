@@ -129,15 +129,24 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
           || candidate.direction !== 'in' || !('transfer' in candidate)
           || typeof candidate.transfer !== 'function') throw new Error('Bulk IN 0x82 missing');
         const endpoint = candidate as PrinterInEndpoint;
-        endpoint.timeout = Math.max(1, Math.ceil(timeoutMs));
-        return new Promise<Buffer>((resolve, reject) => {
-          // One maximum packet, so an exact 64-byte reply fragment can complete.
-          endpoint.transfer(64, (error, data) => {
-            if (error) reject(error);
-            else if (!Buffer.isBuffer(data) || data.length === 0) reject(new Error('Empty USB response'));
-            else resolve(data);
+        let remaining = Math.max(1, Math.ceil(timeoutMs));
+        const deadline = Date.now() + remaining;
+        while (remaining > 0) {
+          endpoint.timeout = remaining;
+          const data = await new Promise<Buffer>((resolve, reject) => {
+            // One maximum packet, so an exact 64-byte reply fragment can complete.
+            endpoint.transfer(64, (error, data) => {
+              if (error) reject(error);
+              else if (!Buffer.isBuffer(data)) reject(new Error('Invalid USB response'));
+              else resolve(data);
+            });
           });
-        });
+          if (data.length) return data;
+          // RP-E11 sends zero-length packets while a command is pending. Keep
+          // receiving the same response within its original deadline; never resend.
+          remaining = deadline - Date.now();
+        }
+        throw new Error('Timed out waiting for USB response data');
       },
     };
     return await operation(io);
