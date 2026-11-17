@@ -7,7 +7,7 @@ import { makeSamples } from '../src/samples.ts';
 
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
-test('native samples and hello match the Python receipts confirmed on hardware', () => {
+test('native samples and hello match hardware-confirmed receipt fixtures', () => {
   assert.equal(sha256(HELLO), '37041454f27691fc73b50e1ded40a1fab75d54f07907cb14ec81757c66e53599');
   assert.equal(sha256(makeSamples()), '28ef4ada49cae62f61718047a7d932abfead4b9f22789e43c7b07a759ae8dc2b');
   assert.equal(sha256(makeSamples('japanese-qr')), 'd9772f6f102cd6b2f7f29156ad36f9995fd308d5c19c7a0760fef74bdc4f3403');
