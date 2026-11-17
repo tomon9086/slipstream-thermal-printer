@@ -1,20 +1,52 @@
 // USB transport for the observed RP-E11. Never detach a driver or retry a send.
-export async function sendToPrinter(payload, {
+export type UsbError = Error & { code?: string; errno?: number };
+export interface PrinterOutEndpoint {
+  direction: 'out';
+  timeout: number;
+  transfer(data: Buffer, callback: (error?: Error | null, actual?: number) => void): unknown;
+}
+export interface PrinterInterface {
+  claim(): void;
+  release(callback: (error?: Error) => void): void;
+  endpoint(address: number): unknown;
+}
+export interface PrinterDevice {
+  timeout: number;
+  open(): void;
+  close(): void;
+  interface(index: number): PrinterInterface;
+  controlTransfer(type: number, request: number, value: number, index: number,
+    length: number, callback: (error?: UsbError, data?: unknown) => void): void;
+}
+export interface SendOptions {
+  statusOnly?: boolean;
+  ignorePaperStatus?: boolean;
+  findDevice?: (vid: number, pid: number) => PrinterDevice | undefined;
+  log?: (message: string) => void;
+}
+
+function isOutEndpoint(endpoint: unknown): endpoint is PrinterOutEndpoint {
+  return typeof endpoint === 'object' && endpoint !== null
+    && 'direction' in endpoint && endpoint.direction === 'out'
+    && 'transfer' in endpoint && typeof endpoint.transfer === 'function';
+}
+
+export async function sendToPrinter(payload: Buffer | null, {
   statusOnly = false,
   ignorePaperStatus = false,
   findDevice,
   log = console.log,
-} = {}) {
+}: SendOptions = {}): Promise<void> {
   if (!statusOnly && (!Buffer.isBuffer(payload) || payload.length === 0)) {
     throw new Error('Print payload must be a non-empty Buffer');
   }
   const find = findDevice ?? (await import('usb')).findByIds;
-  const device = find(0x0619, 0x0123);
+  const device: PrinterDevice | undefined = find(0x0619, 0x0123);
   if (!device) throw new Error('SII 0619:0123 not found; check power and USB connection');
   let opened = false;
   let claimed = false;
-  let iface;
-  let failure;
+  let iface: PrinterInterface | undefined;
+  let failure: unknown;
   try {
     device.open();
     opened = true;
@@ -23,7 +55,7 @@ export async function sendToPrinter(payload, {
     iface.claim();
     claimed = true;
     log('Connected to SII 0619:0123, interface 0');
-    const status = await new Promise((resolve, reject) => {
+    const status = await new Promise<unknown>((resolve, reject) => {
       device.controlTransfer(0xa1, 1, 0, 0, 1, (error, data) => {
         if (error) {
           // GET_PORT_STATUS may be unsupported. Only a stalled request is optional.
@@ -47,15 +79,16 @@ export async function sendToPrinter(payload, {
           + 'confirm paper empty on this model. Check paper, then use --ignore-paper-status');
       }
     }
+    if (!payload) throw new Error('No print payload');
     const endpoint = iface.endpoint(0x01);
-    if (!endpoint || endpoint.direction !== 'out') throw new Error('Bulk OUT 0x01 missing');
+    if (!isOutEndpoint(endpoint)) throw new Error('Bulk OUT 0x01 missing');
     endpoint.timeout = 15000;
     // Bound transfers below the observed 16KiB receive buffer. No retries, including
     // after a short transfer: some bytes may already have printed.
     let accepted = 0;
     for (let offset = 0; offset < payload.length; offset += 4096) {
       const chunk = payload.subarray(offset, offset + 4096);
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         endpoint.transfer(chunk, (error, actual) => {
           if (error || actual !== chunk.length) {
             reject(new Error(`USB transfer incomplete (${accepted} bytes previously accepted, `
@@ -72,16 +105,18 @@ export async function sendToPrinter(payload, {
     log('Print data sent; check the physical receipt.');
   } catch (error) {
     failure = error;
-    if (error.code === 'LIBUSB_ERROR_ACCESS' || error.errno === -3) {
+    if (error instanceof Error && (('code' in error && error.code === 'LIBUSB_ERROR_ACCESS')
+      || ('errno' in error && error.errno === -3))) {
       throw new Error('USB access denied; use a udev rule or sudo node ...', { cause: error });
     }
     throw error;
   } finally {
     // Always close even if release fails, retaining the original transfer failure.
-    let cleanupError;
-    if (claimed) {
+    let cleanupError: unknown;
+    if (claimed && iface) {
+      const claimedInterface = iface;
       try {
-        await new Promise((resolve, reject) => iface.release(error => error ? reject(error) : resolve()));
+        await new Promise<void>((resolve, reject) => claimedInterface.release(error => error ? reject(error) : resolve()));
       } catch (error) { cleanupError = error; }
     }
     if (opened) {

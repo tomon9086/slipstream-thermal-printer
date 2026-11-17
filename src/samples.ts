@@ -1,10 +1,10 @@
 import iconv from 'iconv-lite';
 
-const ascii = text => Buffer.from(text, 'ascii');
-const sjis = text => iconv.encode(text, 'shiftjis');
+const ascii = (text: string) => Buffer.from(text, 'ascii');
+const sjis = (text: string) => iconv.encode(text, 'shiftjis');
 const QR_DATA = ascii('https://example.com/');
 
-export function qrCommand(data, moduleSize) {
+export function qrCommand(data: Buffer, moduleSize: number): Buffer {
   if (!Number.isInteger(moduleSize) || moduleSize < 2 || moduleSize > 11) {
     throw new Error('QR module size must be 2..11 dots');
   }
@@ -16,9 +16,9 @@ export function qrCommand(data, moduleSize) {
   return Buffer.concat([Buffer.from([0x12, 0x3b, moduleSize, 0x1d, 0x70, 1, 2, 0x4d, 0, 0x42]), length, data]);
 }
 
-export function makeSamples(section = 'all') {
+export function makeSamples(section = 'all'): Buffer {
   if (!['all', 'japanese-qr'].includes(section)) throw new Error('Unknown sample section');
-  const parts = [ascii('\x1b@\x1ba\x00FONT SIZE / QR TEST\n\n')];
+  const parts: Buffer[] = [ascii('\x1b@\x1ba\x00FONT SIZE / QR TEST\n\n')];
   for (const font of section === 'all' ? [0, 1] : []) {
     parts.push(Buffer.from([0x1b, 0x4d, font]), ascii(`FONT ${font === 0 ? 'A' : 'B'}\n`));
     for (const [width, height] of [[1, 1], [1, 2], [2, 1], [2, 2], [3, 3], [4, 4]]) {

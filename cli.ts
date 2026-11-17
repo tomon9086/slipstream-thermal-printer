@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
-import { HELLO, compileReceipt, compileImage } from './src/receipt.js';
-import { makeSamples } from './src/samples.js';
-import { sendToPrinter } from './src/usb.js';
+import { HELLO, compileReceipt, compileImage } from './src/receipt.ts';
+import { makeSamples } from './src/samples.ts';
+import { sendToPrinter } from './src/usb.ts';
 
-const help = `Usage: node cli.js <command> [file] [options]
+const help = `Usage: node cli.ts <command> [file] [options]
 Commands:
   status                 Read USB status without printing
   hello                  Print Hello, World!
@@ -36,14 +36,14 @@ async function main() {
   if (!['status', 'hello', 'samples', 'receipt', 'image', 'raw'].includes(command)
       || positionals.length !== (needsFile ? 2 : 1)) throw new Error(help);
   for (const [option, valid] of [['preview', command === 'receipt'], ['cpl', command === 'receipt'],
-    ['width', command === 'image'], ['section', command === 'samples'], ['output', command !== 'status']]) {
+    ['width', command === 'image'], ['section', command === 'samples'], ['output', command !== 'status']] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
   }
   if (command === 'status') {
     if (values['dry-run']) throw new Error('status requires a USB connection');
     return sendToPrinter(null, { statusOnly: true });
   }
-  let payload;
+  let payload: Buffer;
   switch (command) {
     case 'hello': payload = HELLO; break;
     case 'samples': payload = makeSamples(values.section); break;
@@ -56,6 +56,7 @@ async function main() {
       if (values.preview) await writeFile(values.preview, compileReceipt(document, { ...options, svg: true }));
       break;
     }
+    default: throw new Error(help);
   }
   console.log(`Prepared ${payload.length} bytes (${command})`);
   if (values.output) await writeFile(values.output, payload);

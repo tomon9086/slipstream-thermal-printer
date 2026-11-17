@@ -23,19 +23,18 @@ Linux環境でRP-E11へUSB接続し、ESC/POSの `Hello, World!`、紙送り、
 
 ## Node.js版のUSB送信
 
-Node 26を使用し、依存はpnpmで管理します。
-
-現在は `src/usb.js` が接続・ステータス・送信を担当し、`cli.js` から呼び出します。
+現在は `src/usb.ts` が接続・ステータス・送信を担当し、`cli.ts` から呼び出します。
+TypeScriptをNode 26で直接実行し、依存はpnpmで管理します。
 `usb` パッケージのlibusb版2.xを使用し、VID/PID・インターフェース・エンドポイントは上表と同じです。
 3.xは別のバックエンド/APIのため、本実装の依存範囲には含めていません。
 
 ```sh
-node cli.js status
-node cli.js hello --ignore-paper-status
-node cli.js receipt examples/demo.receipt --ignore-paper-status
+node cli.ts status
+node cli.ts hello --ignore-paper-status
+node cli.ts receipt examples/demo.receipt --ignore-paper-status
 ```
 
-権限が足りない場合は `sudo "$(command -v node)" cli.js ...` で実行するか、下記udevルールを使います。
+権限が足りない場合は `sudo "$(command -v node)" cli.ts ...` で実行するか、下記udevルールを使います。
 Nodeの配置場所・依存パッケージの導入はREADMEを参照してください。
 
 Python版と同じ `GET_PORT_STATUS` を2秒のタイムアウトで読み、状態が正常なら送信します。
@@ -46,6 +45,7 @@ Python版と同じ `GET_PORT_STATUS` を2秒のタイムアウトで読み、状
 ドライバーの自動切り離しやメモリスイッチの変更は行いません。
 
 Node版でステータス `0x38` の取得と、ReceiptLineデモ全2797バイトのUSB受信を確認済みです。
+pnpm・TypeScript・Node 26.13.1への移行後も、同じデモを全2797バイト送信できることを確認しました。
 これらは接続・転送の確認であり、Node版デモの紙出力とQR読み取りはユーザー確認待ちです。
 
 ## Python版スクリプトと送信内容

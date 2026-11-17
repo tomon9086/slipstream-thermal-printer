@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { HELLO, compileReceipt, compileImage } from '../src/receipt.js';
-import { makeSamples } from '../src/samples.js';
+import { HELLO, compileReceipt, compileImage } from '../src/receipt.ts';
+import { makeSamples } from '../src/samples.ts';
 
-const sha256 = data => createHash('sha256').update(data).digest('hex');
+const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
 test('native samples and hello match the Python receipts confirmed on hardware', () => {
   assert.equal(sha256(HELLO), '37041454f27691fc73b50e1ded40a1fab75d54f07907cb14ec81757c66e53599');

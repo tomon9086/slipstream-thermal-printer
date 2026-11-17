@@ -7,8 +7,9 @@
     "node": ">=26 <27"
   },
   "scripts": {
-    "print": "node cli.js",
-    "test": "node --test"
+    "print": "node cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "iconv-lite": "^0.7.3",

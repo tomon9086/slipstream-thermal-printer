@@ -1,38 +1,49 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendToPrinter } from '../src/usb.js';
+import { sendToPrinter } from '../src/usb.ts';
+import type { PrinterDevice, PrinterInterface, PrinterOutEndpoint, SendOptions, UsbError } from '../src/usb.ts';
 
+interface PrinterFixtureOptions {
+  status?: Buffer;
+  statusError?: UsbError;
+  short?: boolean;
+  failChunk?: number;
+  claimError?: Error;
+  releaseError?: Error;
+}
 function printer({ status = Buffer.from([0x18]), statusError, short = false,
-  failChunk, claimError, releaseError } = {}) {
-  const events = [];
-  const chunks = [];
-  const endpoint = {
+  failChunk, claimError, releaseError }: PrinterFixtureOptions = {}) {
+  const events: string[] = [];
+  const chunks: Buffer[] = [];
+  const endpoint: PrinterOutEndpoint = {
     direction: 'out',
+    timeout: 0,
     transfer(data, callback) {
       chunks.push(Buffer.from(data));
       callback(chunks.length === failChunk ? new Error('timeout') : null,
         short ? data.length - 1 : data.length);
     },
   };
-  const iface = {
+  const iface: PrinterInterface = {
     claim() { events.push('claim'); if (claimError) throw claimError; },
     release(callback) { events.push('release'); callback(releaseError); },
     endpoint(address) { assert.equal(address, 1); return endpoint; },
   };
-  const device = {
+  const device: PrinterDevice = {
+    timeout: 0,
     open() { events.push('open'); },
     close() { events.push('close'); },
     interface(index) { assert.equal(index, 0); return iface; },
-    controlTransfer(...args) {
-      const callback = args.pop();
-      assert.deepEqual(args, [0xa1, 1, 0, 0, 1]);
+    controlTransfer(type, request, value, index, length, callback) {
+      assert.deepEqual([type, request, value, index, length], [0xa1, 1, 0, 0, 1]);
       callback(statusError, status);
     },
   };
-  return { events, chunks, endpoint, options: {
+  const options: SendOptions = {
     findDevice(vid, pid) { assert.deepEqual([vid, pid], [0x0619, 0x0123]); return device; },
     log() {},
-  } };
+  };
+  return { events, chunks, endpoint, options };
 }
 
 test('status-only claims, reads, and closes without sending on 0x38', async () => {
@@ -43,7 +54,7 @@ test('status-only claims, reads, and closes without sending on 0x38', async () =
 });
 
 test('paper bit requires override, while override cannot suppress actual error', async () => {
-  for (const [status, ignorePaperStatus] of [[0x38, false], [0x30, true]]) {
+  for (const [status, ignorePaperStatus] of [[0x38, false], [0x30, true]] as const) {
     const p = printer({ status: Buffer.from([status]) });
     await assert.rejects(sendToPrinter(Buffer.from('test'), { ...p.options, ignorePaperStatus }), /no print sent/);
     assert.equal(p.chunks.length, 0);
@@ -71,7 +82,9 @@ test('short transfer is never retried and stops later chunks', async () => {
 test('timeout after a successful chunk stops sending and preserves error through cleanup', async () => {
   const p = printer({ failChunk: 2, releaseError: new Error('release failed') });
   await assert.rejects(sendToPrinter(Buffer.alloc(9000), p.options), error => {
+    assert.ok(error instanceof Error);
     assert.match(error.message, /4096 bytes previously accepted/);
+    assert.ok(error.cause instanceof Error);
     assert.equal(error.cause.message, 'timeout');
     return true;
   });

@@ -5,7 +5,7 @@
 
 ## Node.js版
 
-ReceiptLine原稿の変換からUSB送信までNode.jsで実行できます。Pythonは不要です。
+ReceiptLine原稿の変換からUSB送信までTypeScriptで実装し、Node.jsで実行できます。Pythonは不要です。
 Node.js 26.x（本環境は26.13.1）・pnpm 12.21.0、LinuxのUSBアクセス権限が必要です。
 
 ```sh
@@ -21,7 +21,7 @@ pnpm run print receipt examples/demo.receipt --preview /tmp/receipt.svg --output
 pnpm run print receipt examples/demo.receipt --ignore-paper-status
 ```
 
-USB権限がない場合、印刷・接続確認のコマンドは `sudo "$(command -v node)" cli.js ...` で実行できます。
+USB権限がない場合、印刷・接続確認のコマンドは `sudo "$(command -v node)" cli.ts ...` で実行できます。
 依存パッケージのインストールは通常ユーザーで実行してください。
 この作業環境のNodeは以下に配置しました。PATHにNodeがない場合は先に設定します。
 
@@ -33,13 +33,13 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 
 | コマンド | 内容 |
 | --- | --- |
-| `node cli.js status` | USBステータス確認のみ |
-| `node cli.js hello` | Hello, World!と紙送り・カット |
-| `node cli.js samples` | 従来と同じ英数字サイズ・日本語・SII内蔵QRの見本 |
-| `node cli.js samples --section japanese-qr` | 日本語とQRだけの見本 |
-| `node cli.js receipt examples/demo.receipt` | UTF-8のReceiptLine原稿を変換して印刷 |
-| `node cli.js image image.png` | 画像を白地合成・縮小・網点変換して印刷（JPEG等も対応） |
-| `node cli.js raw /tmp/receipt.bin` | 生成済みの印刷バイナリーをそのまま送信 |
+| `node cli.ts status` | USBステータス確認のみ |
+| `node cli.ts hello` | Hello, World!と紙送り・カット |
+| `node cli.ts samples` | 従来と同じ英数字サイズ・日本語・SII内蔵QRの見本 |
+| `node cli.ts samples --section japanese-qr` | 日本語とQRだけの見本 |
+| `node cli.ts receipt examples/demo.receipt` | UTF-8のReceiptLine原稿を変換して印刷 |
+| `node cli.ts image image.png` | 画像を白地合成・縮小・網点変換して印刷（JPEG等も対応） |
+| `node cli.ts raw /tmp/receipt.bin` | 生成済みの印刷バイナリーをそのまま送信 |
 
 印刷コマンドには必要に応じて `--ignore-paper-status` を付けます。
 この個体で印刷できる状態でも立つUSBの紙ステータスビットだけを回避する指定です。
@@ -58,10 +58,10 @@ ReceiptLineは `command: 'sii'`、`encoding: 'shiftjis'`、`cpl: 30` が初期�
 [examples/demo.receipt](examples/demo.receipt) を編集すれば、Pythonや印刷コマンドを書かずに
 レシートを作れます。記法は [ReceiptLine](https://github.com/receiptline/receiptline) を参照してください。
 
-- `src/receipt.js`: ReceiptLine変換とsharpによる画像の前処理。
-- `src/samples.js`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
-- `src/usb.js`: USB接続・ステータス確認・送信・解放。
-- `cli.js`: 上記を呼び出すCLI。
+- `src/receipt.ts`: ReceiptLine変換とsharpによる画像の前処理。
+- `src/samples.ts`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
+- `src/usb.ts`: USB接続・ステータス確認・送信・解放。
+- `cli.ts`: 上記を呼び出すCLI。
 
 USBは `usb` のlibusb版（2.x）を使い、転送タイムアウトと実転送バイト数を確認します。
 最大4096バイトずつ順番に送り、途中エラー・短い転送では停止し、自動再送しません。
@@ -70,19 +70,21 @@ ReceiptLine出力はバイナリー文字列なので `Buffer.from(data, 'latin1
 ReceiptLineのSII向けQRはライブラリ側で画像を生成します。
 `samples` は従来と同じSII内蔵QRコマンドで、両者は別の印刷経路です。
 
-pnpmは `packageManager` で12.21.0に固定し、依存バージョンは `pnpm-lock.yaml` で管理します。
+Node 26の型除去機能で `.ts` を直接実行します。ビルドやtsxは不要です。
 `.node-version` と `engines.node` でNode 26系を指定し、pnpmの `engineStrict` でも確認します。
+pnpmは `packageManager` で12.21.0に固定し、依存バージョンは `pnpm-lock.yaml` で管理します。
 pnpm未導入の場合は [pnpmの導入手順](https://pnpm.io/installation) を参照してください。
 この環境ではNode 26のbinディレクトリーにpnpmコマンドも配置済みです。
 `pnpm-workspace.yaml` はUSBネイティブモジュールのビルドを許可しています。
 
 ### 確認結果
 
-`pnpm test` で15件のテストを実行できます。
+`pnpm typecheck` でstrictの型チェック、`pnpm test` で15件のテストを実行できます。
 紙ステータス・実エラーによる停止、転送分割とバイト保持、途中エラー時の再送防止、USB解放、
 Shift JIS変換、QR画像生成、透明画像の白地合成を確認しています。
 `hello` と `samples` のデータは、印刷確認済みPython版とのバイト一致を確認済みです。
 Node版で実機のステータス `0x38` を取得し、デモ原稿全2797バイトのUSB送信に成功しました。
+pnpm・TypeScript・Node 26.13.1への移行後も、型チェック・15件のテストとデモ原稿のUSB送信を確認済みです。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。
 
 ## Python版のUSBテスト印刷
