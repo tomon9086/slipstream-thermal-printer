@@ -41,6 +41,8 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 | コマンド | 内容 |
 | --- | --- |
 | `node cli.ts status` | USBステータス確認のみ |
+| `node cli.ts mark-status` | マーク紙モード・マークセンサー・用紙状態を確認（紙送りなし） |
+| `node cli.ts mark-feed` | マーク紙の印字開始位置へ合わせる |
 | `node cli.ts samples` | 従来と同じ英数字サイズ・日本語・SII内蔵QRの見本 |
 | `node cli.ts samples --section japanese-qr` | 日本語とQRだけの見本 |
 | `node cli.ts receipt examples/demo.receipt` | UTF-8のReceiptLine原稿を変換して印刷 |
@@ -66,6 +68,42 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 この指定はデータ生成の幅を切り替えるもので、プリンター本体の紙幅やメモリスイッチは変更しません。
 80mmでの実機印刷は未確認です。ReceiptLineの出力方式は `sii`、文字コードは `shiftjis` を使います。
 
+### ブラックマーク付き用紙（実験機能）
+
+初版は本体のマーク紙モード（MS1-3）が有効になっていることを前提にします。
+設定は読み取るだけで、メモリスイッチの書き換えやFLASHへの保存は行いません。
+無効なら紙送り・印字前にエラーにします。センサーが読める裏面マーク付きの対応用紙が必要です。
+
+```sh
+# 実機の状態だけ取得。通常の用紙でも実行でき、紙は動かさない
+pnpm run print mark-status
+
+# 紙を動かさずコマンド生成だけ確認
+pnpm run print mark-feed --dry-run
+pnpm run print receipt examples/mark-test.receipt --black-mark --dry-run
+
+# 以下はマーク紙モードと対応用紙を準備してから実行する
+pnpm run print mark-feed --ignore-paper-status
+pnpm run print receipt examples/mark-test.receipt --black-mark --ignore-paper-status
+pnpm run print image image.png --black-mark --ignore-paper-status
+```
+
+USB権限がない場合は、通常印刷と同じく `sudo "$(command -v node)" cli.ts ...` を使います。
+`--black-mark` は `receipt` / `image` に対応し、初期化・印字開始位置合わせ・本文・カット位置への送りを
+分けて送信します。各段階で実行応答とエラー状態を読み、失敗時に後続の処理を送らず終了します。
+通常の自動カットと原稿内の `=` によるカットは省き、最後のカットは `--cut` を指定した場合だけ行います。
+ただし本体仕様として、マーク探索上限に達した場合は停止・カットする動作があります。
+`--cut` を省いても、エラー時に一切切られないという意味ではありません。
+
+`--output` は位置合わせを含む印刷コマンドのバイナリーを保存します。
+`raw` で送る場合は、マーク紙モードの確認や段階ごとのエラー確認を行いません。
+プレビューは内容の見本であり、実機のマーク位置・カット位置は表現しません。
+本文がラベルの高さに収まることは別途確認してください。
+`examples/mark-test.receipt` は短い確認用原稿です。通常のデモは約54.4mmあり、46mm高のラベルには収まりません。
+
+実機では `mark-status` の受信・設定の復号を確認済みです。
+現在は `markMode: false`、紙あり、残量少で、マーク付き用紙での紙送り・印刷は未検証です。
+
 ### 原稿と実装
 
 [examples/demo.receipt](examples/demo.receipt) を編集すれば、プログラムや印刷コマンドを書かずに
@@ -83,6 +121,7 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 
 - `src/receipt.ts`: ReceiptLine変換とsharpによる画像の前処理。
 - `src/paper.ts`: 58mm/80mmの印字幅・行幅の対応。
+- `src/black-mark.ts`: SII応答の復号、マーク状態の取得、段階ごとの位置合わせと印刷。
 - `src/samples.ts`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
 - `src/usb.ts`: USB接続・ステータス確認・送信・解放。
 - `cli.ts`: 上記を呼び出すCLI。
@@ -109,7 +148,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと19件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと33件のテストを確認済みです。
 紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
 80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。

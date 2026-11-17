@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { paperLayout } from './paper.ts';
+import type { MarkedJob } from './black-mark.ts';
 
 // Expand local image references and fit standalone PNG images to the paper layout.
 // Paths are relative to the document, independent of the caller's working directory.
@@ -50,4 +51,27 @@ export async function compileImage(path: string | Buffer, { paperWidth = 58 }: {
   const document = `{image:${data.toString('base64')}}`;
   const options = { ...printerOptions(paperWidth), gradient: true };
   return Buffer.from(receiptline.transform(document, options), 'latin1');
+}
+
+export function compileMarkedReceipt(document: string, { paperWidth = 58 }: { paperWidth?: number } = {}): MarkedJob {
+  const base = receiptline.commands.sii;
+  let setup: Buffer = Buffer.alloc(0);
+  const command: receiptline.BaseCommand = {
+    ...base,
+    open(printer) {
+      setup = Buffer.from(base.open.call(this, printer), 'latin1');
+      return '';
+    },
+    close() { return ''; },
+    // Also suppress cuts requested by '=' inside the document.
+    cut() { return ''; },
+  };
+  const body = Buffer.from(receiptline.transform(document,
+    { ...printerOptions(paperWidth), cutting: false, command }), 'latin1');
+  return { setup, body };
+}
+
+export async function compileMarkedImage(path: string | Buffer, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<MarkedJob> {
+  const data = await prepareImage(path, paperWidth);
+  return compileMarkedReceipt(`{image:${data.toString('base64')}}`, { paperWidth });
 }
