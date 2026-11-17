@@ -1,0 +1,12 @@
+{align:center}
+^^^SlipStream
+日本語レシート
+{align:left}
+---
+コーヒー | 350円
+プリン | 250円
+---
+合計 | 600円
+{align:center}
+ありがとうございます！
+{code:https://example.com/; option:qrcode,5,m}

@@ -1,0 +1,30 @@
+import receiptline from 'receiptline';
+import sharp from 'sharp';
+
+export const HELLO = Buffer.from('1b4048656c6c6f2c20576f726c64210a0a0a0a0a1d5601', 'hex');
+
+export function printerOptions(cpl = 30) {
+  if (!Number.isInteger(cpl) || cpl < 1 || cpl > 36) {
+    throw new Error('cpl must be an integer from 1 to 36 for this 58mm printer');
+  }
+  return { command: 'sii', encoding: 'shiftjis', cpl, spacing: true, cutting: true };
+}
+
+export function compileReceipt(document, { cpl = 30, svg = false } = {}) {
+  const options = printerOptions(cpl);
+  if (svg) return receiptline.transform(document, { ...options, command: 'svg' });
+  // ReceiptLine returns a binary string, not UTF-8. UTF-8 corrupts command/image bytes.
+  return Buffer.from(receiptline.transform(document, options), 'latin1');
+}
+
+export async function compileImage(path, { width = 360 } = {}) {
+  if (!Number.isInteger(width) || width < 8 || width > 432 || width % 8) {
+    throw new Error('width must be a multiple of 8 from 8 to 432 for 58mm paper');
+  }
+  const { data, info } = await sharp(path).autoOrient().flatten({ background: '#ffffff' })
+    .resize({ width }).png().toBuffer({ resolveWithObject: true });
+  if (info.height > 65535) throw new Error('Image is too tall');
+  const document = `{image:${data.toString('base64')}}`;
+  const options = { ...printerOptions(), cpl: Math.ceil(width / 12), gradient: true };
+  return Buffer.from(receiptline.transform(document, options), 'latin1');
+}

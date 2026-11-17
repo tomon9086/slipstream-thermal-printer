@@ -21,7 +21,32 @@ Linux環境でRP-E11へUSB接続し、ESC/POSの `Hello, World!`、紙送り、
 バス番号・デバイス番号は抜き差しで変わるので、スクリプトはUSB IDで検索する。
 上記のIDやエンドポイントは今回の個体での観測値であり、別モデルへはそのまま流用しない。
 
-## スクリプトと送信内容
+## Node.js版のUSB送信
+
+現在は `src/usb.js` が接続・ステータス・送信を担当し、`cli.js` から呼び出します。
+`usb` パッケージのlibusb版2.xを使用し、VID/PID・インターフェース・エンドポイントは上表と同じです。
+3.xは別のバックエンド/APIのため、本実装の依存範囲には含めていません。
+
+```sh
+node cli.js status
+node cli.js hello --ignore-paper-status
+node cli.js receipt examples/demo.receipt --ignore-paper-status
+```
+
+権限が足りない場合は `sudo "$(command -v node)" cli.js ...` で実行するか、下記udevルールを使います。
+Nodeの配置場所・依存パッケージの導入はREADMEを参照してください。
+
+Python版と同じ `GET_PORT_STATUS` を2秒のタイムアウトで読み、状態が正常なら送信します。
+`--ignore-paper-status` は `0x20` のみ回避し、`0x08` が落ちている場合は停止します。
+要求がSTALLした場合は印刷時のみ続行可能ですが、状態確認だけの実行は失敗として終了します。
+送信は1回最大4096バイト・タイムアウト15秒で順番に行い、各転送のバイト数を確認します。
+途中エラーや短い転送で自動再送せず終了し、インターフェースとデバイスを解放します。
+ドライバーの自動切り離しやメモリスイッチの変更は行いません。
+
+Node版でステータス `0x38` の取得と、ReceiptLineデモ全2797バイトのUSB受信を確認済みです。
+これらは接続・転送の確認であり、Node版デモの紙出力とQR読み取りはユーザー確認待ちです。
+
+## Python版スクリプトと送信内容
 
 `print_hello.py` はPython標準の `ctypes` からシステムのlibusbを呼び出す。
 この環境では `libusb-1.0.so.0` が利用できた。PyUSBやCUPSは使っていない。
