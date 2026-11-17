@@ -41,7 +41,6 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 | コマンド | 内容 |
 | --- | --- |
 | `node cli.ts status` | USBステータス確認のみ |
-| `node cli.ts hello` | Hello, World!と紙送り・カット |
 | `node cli.ts samples` | 従来と同じ英数字サイズ・日本語・SII内蔵QRの見本 |
 | `node cli.ts samples --section japanese-qr` | 日本語とQRだけの見本 |
 | `node cli.ts receipt examples/demo.receipt` | UTF-8のReceiptLine原稿を変換して印刷 |
@@ -107,7 +106,7 @@ pnpm未導入の場合は [pnpmの導入手順](https://pnpm.io/installation) �
 `pnpm typecheck` でstrictの型チェック、`pnpm test` でテストを実行できます。
 紙ステータス・実エラーによる停止、転送分割とバイト保持、途中エラー時の再送防止、USB解放、
 Shift JIS変換、QR画像生成、透明画像の白地合成を確認しています。
-`hello` と `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
+`samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
 pnpm・TypeScript・Node 26.13.1で型チェックと19件のテストを確認済みです。

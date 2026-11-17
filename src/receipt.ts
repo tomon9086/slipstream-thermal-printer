@@ -4,8 +4,6 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { paperLayout } from './paper.ts';
 
-export const HELLO = Buffer.from('1b4048656c6c6f2c20576f726c64210a0a0a0a0a1d5601', 'hex');
-
 // Expand local image references and fit standalone PNG images to the paper layout.
 // Paths are relative to the document, independent of the caller's working directory.
 export async function loadReceipt(file: string, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<string> {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
-import { HELLO, compileReceipt, compileImage, loadReceipt } from './src/receipt.ts';
+import { compileReceipt, compileImage, loadReceipt } from './src/receipt.ts';
 import { makeSamples } from './src/samples.ts';
 import { sendToPrinter } from './src/usb.ts';
 import { paperLayout } from './src/paper.ts';
@@ -9,7 +9,6 @@ import { paperLayout } from './src/paper.ts';
 const help = `Usage: node cli.ts <command> [file] [options]
 Commands:
   status                 Read USB status without printing
-  hello                  Print Hello, World!
   samples                Print font, Japanese, and native QR samples
   receipt <file>         Print a UTF-8 ReceiptLine document
   image <file>           Resize, flatten transparency, and print an image
@@ -33,7 +32,7 @@ async function main() {
   if (values.help || positionals.length === 0) { console.log(help); return; }
   const [command, file] = positionals;
   const needsFile = ['receipt', 'image', 'raw'].includes(command);
-  if (!['status', 'hello', 'samples', 'receipt', 'image', 'raw'].includes(command)
+  if (!['status', 'samples', 'receipt', 'image', 'raw'].includes(command)
       || positionals.length !== (needsFile ? 2 : 1)) throw new Error(help);
   for (const [option, valid] of [['preview', command === 'receipt'],
     ['paper-width', command === 'receipt' || command === 'image'],
@@ -48,7 +47,6 @@ async function main() {
   }
   let payload: Buffer;
   switch (command) {
-    case 'hello': payload = HELLO; break;
     case 'samples': payload = makeSamples(values.section); break;
     case 'raw': payload = await readFile(file); break;
     case 'image': payload = await compileImage(file, { paperWidth }); break;
