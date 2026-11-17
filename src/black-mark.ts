@@ -1,4 +1,5 @@
 import type { PrinterIO } from './usb.ts';
+import { paperLayout } from './paper.ts';
 
 export interface MarkedJob { setup: Buffer; body: Buffer }
 type Reply = { kind: 'hex'; data: Buffer } | { kind: 'status'; value: number }
@@ -123,8 +124,16 @@ class SiiClient {
   }
 }
 
+// Nested operations must share response fragments and completion tags on one USB stream.
+const clients = new WeakMap<PrinterIO, SiiClient>();
+function clientFor(io: PrinterIO): SiiClient {
+  let client = clients.get(io);
+  if (!client) { client = new SiiClient(io); clients.set(io, client); }
+  return client;
+}
+
 export async function inspectBlackMark(io: PrinterIO) {
-  const client = new SiiClient(io);
+  const client = clientFor(io);
   await client.synchronize();
   const settings = await client.settings();
   const sensors = await client.status(8);
@@ -135,7 +144,7 @@ export async function inspectBlackMark(io: PrinterIO) {
 }
 
 async function prepare(io: PrinterIO) {
-  const client = new SiiClient(io);
+  const client = clientFor(io);
   await client.synchronize();
   const settings = await client.settings();
   if (!(settings[0] & 4)) throw new Error('Black mark mode is disabled (MS1-3); configure the printer first. No paper movement sent');
@@ -173,5 +182,46 @@ export async function printMarkedJob(io: PrinterIO, job: MarkedJob, cut = false,
   if (cut) {
     await client.execute(CUT);
     await client.assertReady();
+  }
+}
+
+// Explicit paper-width options change only volatile MS4, then restore its original byte.
+export async function withPaperWidth<T>(io: PrinterIO, width: number | undefined,
+  operation: (io: PrinterIO) => Promise<T>): Promise<T> {
+  if (width === undefined) return operation(io);
+  paperLayout(width);
+  let writeFailed = false;
+  const session: PrinterIO = { read: timeout => io.read(timeout), async write(data) {
+    try { await io.write(data); }
+    catch (error) { writeFailed = true; throw error; }
+  } };
+  const client = clientFor(session);
+  await client.synchronize();
+  const original = await client.settings();
+  // MS4-4: paper width, MS4-5: effective dots. Match our 360/576-dot layouts.
+  const ms4 = (original[3] & ~0x18) | (width === 80 ? 0x18 : 0);
+  if (ms4 === original[3]) return operation(session);
+  const setting = (value: number) => Buffer.from([0x12, 0x77, 4, value, 0]);
+  let failure: unknown;
+  try {
+    await client.execute(setting(ms4));
+    if ((await client.settings())[3] !== ms4) throw new Error('Paper-width setting verification failed');
+    const result = await operation(session);
+    await client.synchronize(); // Printing must finish before initialization during restore.
+    return result;
+  } catch (error) {
+    failure = error;
+    throw error;
+  } finally {
+    if (writeFailed) {
+      throw new Error('USB write failed; paper width could not safely be restored. Power-cycle the printer to reload saved settings', { cause: failure });
+    }
+    try {
+      await client.execute(setting(original[3]));
+      if ((await client.settings())[3] !== original[3]) throw new Error('Restored MS4 did not match');
+    } catch (error) {
+      throw new Error('Could not restore printer paper width; power-cycle the printer to reload saved settings',
+        { cause: failure === undefined ? error : new AggregateError([failure, error], 'Operation and restoration failed') });
+    }
   }
 }

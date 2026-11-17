@@ -63,6 +63,18 @@ test('invalid mark options fail before connecting', () => {
   }
 });
 
+test('mark-feed accepts paper width for actual positioning without USB access during export', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'slipstream-feed-width-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const width of [58, 80]) {
+    const output = join(directory, `${width}.bin`);
+    const result = cli('mark-feed', `--paper-width=${width}`, '--output', output);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(!result.stdout.includes('Connected'));
+    assert.deepEqual(await readFile(output), Buffer.from([0x1b, 0x40, 0x1d, 0x3c]));
+  }
+});
+
 test('CLI exports forward/reverse/zero correction for feed, receipt and image without USB', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-offset-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

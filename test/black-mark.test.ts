@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SiiReplyDecoder, inspectBlackMark, feedToMark, markAlignmentBytes, printMarkedJob, markedJobBytes } from '../src/black-mark.ts';
+import { SiiReplyDecoder, inspectBlackMark, feedToMark, markAlignmentBytes, printMarkedJob, markedJobBytes, withPaperWidth } from '../src/black-mark.ts';
 import { compileMarkedReceipt } from '../src/receipt.ts';
 import type { PrinterIO } from '../src/usb.ts';
 
@@ -8,12 +8,13 @@ function encodeHex(data: Buffer) {
   return Buffer.from([14, ...[...data].flatMap(byte => [0xe0 | (byte & 15), 0xf0 | (byte >> 4)]), 0]);
 }
 
-function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '' } = {}) {
+function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '', ms4 = 0xff, asbAfterSettings = false } = {}) {
   let queued: Buffer = Buffer.alloc(0);
   const writes: Buffer[] = [];
   const stages: Buffer[] = [];
   const settings = Buffer.alloc(40, 0xff);
   settings[0] = mode ? 0xff : 0xfb;
+  settings[3] = ms4;
   let errors = paperError;
   const io: PrinterIO = {
     async write(data) {
@@ -22,7 +23,8 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '' 
         // Old status/ack, an initialization, fragmented ASB, then our fence.
         queued = Buffer.concat([queued, Buffer.from([0xa7, 0x80, 0xb2, 0xc0, ...Array(7).fill(0xd0), 0x8f])]);
       } else if (data.equals(Buffer.from([0x12, 0x6c, 0]))) {
-        queued = Buffer.concat([queued, encodeHex(settings)]);
+        queued = Buffer.concat([queued, encodeHex(settings),
+          ...(asbAfterSettings ? [Buffer.from([0xc0, ...Array(7).fill(0xd0)])] : [])]);
       } else if (data[0] === 0x1d && data[1] === 0x72) {
         const status = data[2] === 8 ? 0x0c : data[2] === 1 ? errors : 0;
         queued = Buffer.concat([queued, Buffer.from([0xa0 | status])]);
@@ -30,6 +32,10 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '' 
         assert.deepEqual(data.subarray(-3, -1), Buffer.from([0x12, 0x71]));
         const body = Buffer.from(data.subarray(0, -3));
         stages.push(body);
+        if (body[0] === 0x12 && body[1] === 0x77) {
+          assert.deepEqual([body[2], body.length, body[4]], [4, 5, 0]); // MS4 only, no FLASH bit.
+          settings[3] = body[3];
+        }
         if (body.toString('hex') === failAt) errors |= 4;
         if (body.toString('hex') !== timeoutAt) {
           // Ignore an unrelated completion tag and wait for the matching one.
@@ -46,7 +52,7 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '' 
       return chunk;
     },
   };
-  return { io, writes, stages };
+  return { io, writes, stages, settings };
 }
 
 test('SII decoder reconstructs 40 memory switches across all USB split boundaries', () => {
@@ -177,4 +183,85 @@ test('corrected alignment errors and timeouts prevent subsequent printing and cu
       /mark-search paper jam|response failed/);
     assert.equal(p.stages.length, 2);
   }
+});
+
+test('paper width temporarily changes only MS4 layout bits and restores after operation completion', async () => {
+  for (const [ms4, width, expected] of [[0xff, 58, 0xe7], [0xa7, 80, 0xbf]]) {
+    const p = mockPrinter({ ms4, asbAfterSettings: true });
+    const original = Buffer.from(p.settings);
+    const result = await withPaperWidth(p.io, width, async io => {
+      assert.equal(p.settings[3], expected);
+      await printMarkedJob(io, compileMarkedReceipt('test'), false, 3);
+      return 42;
+    });
+    assert.equal(result, 42);
+    assert.deepEqual(p.settings, original);
+    assert.deepEqual(p.stages[0], Buffer.from([0x12, 0x77, 4, expected, 0]));
+    assert.deepEqual(p.stages.at(-1), Buffer.from([0x12, 0x77, 4, ms4, 0]));
+    // A completion fence between body/end positioning and restore prevents premature initialization.
+    const restoreIndex = p.writes.findLastIndex(data => data[0] === 0x12 && data[1] === 0x77);
+    assert.deepEqual(p.writes[restoreIndex - 1], Buffer.from([0x12, 0x71, 15]));
+  }
+});
+
+test('omitted/matching widths avoid configuration writes, invalid widths avoid all I/O', async () => {
+  for (const width of [undefined, 80]) {
+    const p = mockPrinter();
+    assert.equal(await withPaperWidth(p.io, width, async () => 'done'), 'done');
+    assert.equal(p.stages.length, 0);
+    if (width === undefined) assert.equal(p.writes.length, 0);
+  }
+  const p = mockPrinter();
+  await assert.rejects(withPaperWidth(p.io, 60, async () => assert.fail('must not run')), /paper-width/);
+  assert.equal(p.writes.length, 0);
+});
+
+test('failed setting verification prevents printing and restores original MS4', async () => {
+  const p = mockPrinter();
+  let changes = 0;
+  const io: PrinterIO = { ...p.io, async write(data) {
+    const altered = Buffer.from(data);
+    if (data[0] === 0x12 && data[1] === 0x77 && ++changes === 1) altered[3] ^= 1;
+    await p.io.write(altered);
+  } };
+  await assert.rejects(withPaperWidth(io, 58, async () => assert.fail('must not print')), /verification failed/);
+  assert.equal(p.settings[3], 0xff);
+  assert.equal(changes, 2);
+});
+
+test('operation errors retain their cause and restore the original paper width', async () => {
+  const p = mockPrinter();
+  const failure = new Error('print failed');
+  await assert.rejects(withPaperWidth(p.io, 58, async () => { throw failure; }), error => error === failure);
+  assert.equal(p.settings[3], 0xff);
+  assert.equal(p.stages.length, 2);
+});
+
+test('failed USB writes stop further commands and report that restoration needs a power cycle', async () => {
+  const p = mockPrinter();
+  const failure = new Error('USB disconnected');
+  const io: PrinterIO = { ...p.io, async write(data) {
+    if (data.equals(Buffer.from('body'))) throw failure;
+    await p.io.write(data);
+  } };
+  await assert.rejects(withPaperWidth(io, 58, io => io.write(Buffer.from('body'))), error => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Power-cycle/);
+    assert.equal(error.cause, failure);
+    return true;
+  });
+  assert.equal(p.settings[3], 0xe7);
+  assert.equal(p.stages.length, 1);
+});
+
+test('failed restoration is reported instead of silently leaving the changed width', async () => {
+  const p = mockPrinter();
+  let changes = 0;
+  const io: PrinterIO = { ...p.io, async write(data) {
+    const altered = Buffer.from(data);
+    if (data[0] === 0x12 && data[1] === 0x77 && ++changes === 2) altered[3] = 0xe7;
+    await p.io.write(altered);
+  } };
+  await assert.rejects(withPaperWidth(io, 58, async () => {}), /Could not restore printer paper width/);
+  assert.equal(p.settings[3], 0xe7);
 });
