@@ -4,6 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { HELLO, compileReceipt, compileImage, loadReceipt } from './src/receipt.ts';
 import { makeSamples } from './src/samples.ts';
 import { sendToPrinter } from './src/usb.ts';
+import { paperLayout } from './src/paper.ts';
 
 const help = `Usage: node cli.ts <command> [file] [options]
 Commands:
@@ -18,8 +19,7 @@ Options:
   --dry-run              Build data without opening USB
   --output <file>        Save binary data without printing
   --preview <file.svg>   Save a ReceiptLine SVG preview without printing
-  --cpl <number>         Receipt width in half-width characters (default 30)
-  --width <dots>         Image width (default 360; multiple of 8, up to 432)
+  --paper-width <mm>     Paper width: 58 (default) or 80; receipt/image only
   --section <section>    samples: all (default) or japanese-qr
   --help                 Show this help`;
 
@@ -27,7 +27,7 @@ async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {
     'ignore-paper-status': { type: 'boolean' }, 'dry-run': { type: 'boolean' },
     output: { type: 'string' }, preview: { type: 'string' },
-    cpl: { type: 'string' }, width: { type: 'string' }, section: { type: 'string' },
+    'paper-width': { type: 'string' }, section: { type: 'string' },
     help: { type: 'boolean' },
   } });
   if (values.help || positionals.length === 0) { console.log(help); return; }
@@ -35,10 +35,13 @@ async function main() {
   const needsFile = ['receipt', 'image', 'raw'].includes(command);
   if (!['status', 'hello', 'samples', 'receipt', 'image', 'raw'].includes(command)
       || positionals.length !== (needsFile ? 2 : 1)) throw new Error(help);
-  for (const [option, valid] of [['preview', command === 'receipt'], ['cpl', command === 'receipt'],
-    ['width', command === 'image'], ['section', command === 'samples'], ['output', command !== 'status']] as const) {
+  for (const [option, valid] of [['preview', command === 'receipt'],
+    ['paper-width', command === 'receipt' || command === 'image'],
+    ['section', command === 'samples'], ['output', command !== 'status']] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
   }
+  const paperWidth = Number(values['paper-width'] ?? 58);
+  paperLayout(paperWidth);
   if (command === 'status') {
     if (values['dry-run']) throw new Error('status requires a USB connection');
     return sendToPrinter(null, { statusOnly: true });
@@ -48,10 +51,10 @@ async function main() {
     case 'hello': payload = HELLO; break;
     case 'samples': payload = makeSamples(values.section); break;
     case 'raw': payload = await readFile(file); break;
-    case 'image': payload = await compileImage(file, { width: Number(values.width ?? 360) }); break;
+    case 'image': payload = await compileImage(file, { paperWidth }); break;
     case 'receipt': {
-      const document = await loadReceipt(file);
-      const options = { cpl: Number(values.cpl ?? 30) };
+      const document = await loadReceipt(file, { paperWidth });
+      const options = { paperWidth };
       payload = compileReceipt(document, options);
       if (values.preview) await writeFile(values.preview, compileReceipt(document, { ...options, svg: true }));
       break;

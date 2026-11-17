@@ -19,6 +19,9 @@ pnpm run print receipt examples/demo.receipt --preview /tmp/receipt.svg --output
 
 # 原稿から印刷
 pnpm run print receipt examples/demo.receipt --ignore-paper-status
+
+# 80mm用のプレビュー（本体の紙幅設定は変更しない）
+pnpm run print receipt examples/demo.receipt --paper-width=80 --preview /tmp/receipt-80.svg
 ```
 
 USB権限がない場合、印刷・接続確認のコマンドは `sudo "$(command -v node)" cli.ts ...` で実行できます。
@@ -52,10 +55,17 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 `--preview` は `receipt` のみ対応し、ブラウザー用SVGを保存します。
 プレビューの日本語書体は閲覧環境・Webフォントの読み込みに依存し、実機の内蔵書体とは異なります。
 
-ReceiptLineは `command: 'sii'`、`encoding: 'shiftjis'`、`cpl: 30` が初期値です。
-幅は半角文字数で指定し、`receipt --cpl 36` で432ドット設定にも対応します。
-`image --width 432` で画像幅も変更できます。初期値は360ドットです。
-36桁・432ドット幅はプリンターの印字幅設定が対応している場合に使ってください。
+`receipt` と `image` の幅指定は共通の `--paper-width=58|80`（mm）です。省略時は58です。
+従来の `--cpl` と `--width` はこのオプションに統一しました。
+
+| 用紙幅 | アプリの印字幅 | 半角文字数/行 |
+| --- | --- | --- |
+| 58mm（初期値） | 360ドット | 30桁 |
+| 80mm | 576ドット | 48桁 |
+
+58mmは実機確認済みのレイアウトを維持します。80mmは本体が80mm・576ドット設定の場合を想定しています。
+この指定はデータ生成の幅を切り替えるもので、プリンター本体の紙幅やメモリスイッチは変更しません。
+80mmでの実機印刷は未確認です。ReceiptLineの出力方式は `sii`、文字コードは `shiftjis` を使います。
 
 ### 原稿と実装
 
@@ -69,8 +79,11 @@ ReceiptLineは `command: 'sii'`、`encoding: 'shiftjis'`、`cpl: 30` が初期�
 本CLIでは、独立した1行の `{image:@assets/slipstream-shop.png}` でPNGを参照できます。
 これはCLI独自の拡張で、パスは原稿ファイルのあるフォルダーを基準に解決します。
 読み込み時にReceiptLine標準の `{image:Base64データ}` に変換し、プレビュー・印刷の両方に使います。
+原稿内の画像（Base64の直接指定を含む）と単独画像は、向き補正・白地合成・PNG化を共通処理で行います。
+選んだ印字幅を超える画像だけを縦横比を保って縮小し、小さい画像は拡大しません。
 
 - `src/receipt.ts`: ReceiptLine変換とsharpによる画像の前処理。
+- `src/paper.ts`: 58mm/80mmの印字幅・行幅の対応。
 - `src/samples.ts`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
 - `src/usb.ts`: USB接続・ステータス確認・送信・解放。
 - `cli.ts`: 上記を呼び出すCLI。
@@ -97,5 +110,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `hello` と `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと16件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと19件のテストを確認済みです。
+紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
+80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。

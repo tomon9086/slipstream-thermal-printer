@@ -18,9 +18,14 @@ test('local PNG references resolve relative to the receipt and preserve standard
   const embedded = `{image:${image.toString('base64')}}`;
   await writeFile(join(directory, 'test.receipt'), `日本語\r\n{image:@logo.png}\r\n${embedded}\r\n`);
   const document = await loadReceipt(join(directory, 'test.receipt'));
-  assert.equal(document, `日本語\n${embedded}\n${embedded}\n`);
+  const lines = document.trimEnd().split('\n');
+  assert.equal(lines[0], '日本語');
+  assert.equal(lines[1], lines[2]);
+  const normalized = Buffer.from(lines[1].slice('{image:'.length, -1), 'base64');
+  assert.deepEqual(await sharp(normalized).removeAlpha().raw().toBuffer(),
+    await sharp(image).removeAlpha().raw().toBuffer());
   const svg = compileReceipt(document, { svg: true });
-  assert.ok(svg.includes(image.toString('base64')));
+  assert.ok(svg.includes(normalized.toString('base64')));
   assert.ok(compileReceipt(document).length > image.length);
   await writeFile(join(directory, 'missing.receipt'), '{image:@missing.png}');
   await assert.rejects(loadReceipt(join(directory, 'missing.receipt')), { code: 'ENOENT' });
@@ -47,16 +52,46 @@ test('SII QR is rendered as graphics rather than the unsupported Epson QR comman
 
 test('SVG preview and width validation require no USB connection', () => {
   assert.match(compileReceipt('こんにちは', { svg: true }), /<svg/);
-  for (const cpl of [0, 37, 2.5, NaN]) assert.throws(() => compileReceipt('test', { cpl }), /cpl/);
+  assert.match(compileReceipt('test', { svg: true }), /width="360px"/);
+  assert.match(compileReceipt('test', { svg: true, paperWidth: 80 }), /width="576px"/);
+  for (const paperWidth of [0, 59, 81, NaN]) {
+    assert.throws(() => compileReceipt('test', { paperWidth }), /paper-width/);
+  }
 });
 
 test('image conversion flattens transparent black pixels to white before printing', async () => {
   const input = await sharp({ create: { width: 8, height: 1, channels: 4,
     background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
-  const payload = await compileImage(input, { width: 8 });
+  const payload = await compileImage(input);
   const marker = payload.indexOf(Buffer.from([0x1d, 0x38, 0x4c]));
   assert.ok(marker >= 0);
   // GS 8 L has 7 framing bytes and 10 graphics parameters, followed by bitmap data.
   assert.equal(payload[marker + 17], 0);
-  await assert.rejects(compileImage(input, { width: 361 }), /multiple of 8/);
+  assert.equal(payload.readUInt16LE(marker + 13), 8); // Small images are not enlarged.
+  await assert.rejects(compileImage(input, { paperWidth: 59 }), /paper-width/);
+});
+
+test('paper width constrains standalone, referenced, and embedded images with identical preview data', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'slipstream-width-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const input = await sharp({ create: { width: 720, height: 100, channels: 3,
+    background: 'black' } }).png().toBuffer();
+  await writeFile(join(directory, 'wide.png'), input);
+  await writeFile(join(directory, 'test.receipt'),
+    `{image:@wide.png}\n{image:${input.toString('base64')}}`);
+  for (const [paperWidth, dots, height] of [[58, 360, 50], [80, 576, 80]]) {
+    const document = await loadReceipt(join(directory, 'test.receipt'), { paperWidth });
+    const lines = document.split('\n');
+    assert.equal(lines[0], lines[1]);
+    const image = Buffer.from(lines[0].slice('{image:'.length, -1), 'base64');
+    const metadata = await sharp(image).metadata();
+    assert.equal(metadata.width, dots);
+    assert.equal(metadata.height, height);
+    assert.ok(compileReceipt(document, { paperWidth, svg: true }).includes(image.toString('base64')));
+    const payload = await compileImage(input, { paperWidth });
+    const marker = payload.indexOf(Buffer.from([0x1d, 0x38, 0x4c]));
+    assert.equal(payload.readUInt16LE(marker + 13), dots);
+    assert.equal(payload.readUInt16LE(marker + 15), height);
+    assert.ok(compileReceipt(document, { paperWidth }).includes(payload.subarray(marker, marker + 18)));
+  }
 });
