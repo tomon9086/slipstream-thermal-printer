@@ -62,6 +62,14 @@ ReceiptLineは `command: 'sii'`、`encoding: 'shiftjis'`、`cpl: 30` が初期�
 [examples/demo.receipt](examples/demo.receipt) を編集すれば、プログラムや印刷コマンドを書かずに
 レシートを作れます。記法は [ReceiptLine](https://github.com/receiptline/receiptline) を参照してください。
 
+デモ先頭の横長ロゴは、本プロジェクト用に図形と文字のパスから作成した画像です。
+原本は [SVG](examples/assets/slipstream-shop.svg)、印刷用は [PNG](examples/assets/slipstream-shop.png) で、
+外部の画像やフォントは使用していません。
+
+本CLIでは、独立した1行の `{image:@assets/slipstream-shop.png}` でPNGを参照できます。
+これはCLI独自の拡張で、パスは原稿ファイルのあるフォルダーを基準に解決します。
+読み込み時にReceiptLine標準の `{image:Base64データ}` に変換し、プレビュー・印刷の両方に使います。
+
 - `src/receipt.ts`: ReceiptLine変換とsharpによる画像の前処理。
 - `src/samples.ts`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
 - `src/usb.ts`: USB接続・ステータス確認・送信・解放。
@@ -83,11 +91,11 @@ pnpm未導入の場合は [pnpmの導入手順](https://pnpm.io/installation) �
 
 ### 確認結果
 
-`pnpm typecheck` でstrictの型チェック、`pnpm test` で15件のテストを実行できます。
+`pnpm typecheck` でstrictの型チェック、`pnpm test` でテストを実行できます。
 紙ステータス・実エラーによる停止、転送分割とバイト保持、途中エラー時の再送防止、USB解放、
 Shift JIS変換、QR画像生成、透明画像の白地合成を確認しています。
 `hello` と `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
-Node版で実機のステータス `0x38` を取得し、デモ原稿全2797バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1への移行後も、型チェック・15件のテストとデモ原稿のUSB送信を確認済みです。
+実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
+pnpm・TypeScript・Node 26.13.1で型チェックと16件のテストを確認済みです。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。

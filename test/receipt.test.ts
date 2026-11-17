@@ -2,10 +2,29 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { HELLO, compileReceipt, compileImage } from '../src/receipt.ts';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { HELLO, compileReceipt, compileImage, loadReceipt } from '../src/receipt.ts';
 import { makeSamples } from '../src/samples.ts';
 
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
+
+test('local PNG references resolve relative to the receipt and preserve standard content', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'slipstream-receipt-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const image = await readFile(new URL('../examples/assets/slipstream-shop.png', import.meta.url));
+  await writeFile(join(directory, 'logo.png'), image);
+  const embedded = `{image:${image.toString('base64')}}`;
+  await writeFile(join(directory, 'test.receipt'), `日本語\r\n{image:@logo.png}\r\n${embedded}\r\n`);
+  const document = await loadReceipt(join(directory, 'test.receipt'));
+  assert.equal(document, `日本語\n${embedded}\n${embedded}\n`);
+  const svg = compileReceipt(document, { svg: true });
+  assert.ok(svg.includes(image.toString('base64')));
+  assert.ok(compileReceipt(document).length > image.length);
+  await writeFile(join(directory, 'missing.receipt'), '{image:@missing.png}');
+  await assert.rejects(loadReceipt(join(directory, 'missing.receipt')), { code: 'ENOENT' });
+});
 
 test('native samples and hello match hardware-confirmed receipt fixtures', () => {
   assert.equal(sha256(HELLO), '37041454f27691fc73b50e1ded40a1fab75d54f07907cb14ec81757c66e53599');

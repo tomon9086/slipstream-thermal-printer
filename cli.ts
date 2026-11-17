@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { readFile, writeFile } from 'node:fs/promises';
-import { HELLO, compileReceipt, compileImage } from './src/receipt.ts';
+import { HELLO, compileReceipt, compileImage, loadReceipt } from './src/receipt.ts';
 import { makeSamples } from './src/samples.ts';
 import { sendToPrinter } from './src/usb.ts';
 
@@ -50,7 +50,7 @@ async function main() {
     case 'raw': payload = await readFile(file); break;
     case 'image': payload = await compileImage(file, { width: Number(values.width ?? 360) }); break;
     case 'receipt': {
-      const document = await readFile(file, 'utf8');
+      const document = await loadReceipt(file);
       const options = { cpl: Number(values.cpl ?? 30) };
       payload = compileReceipt(document, options);
       if (values.preview) await writeFile(values.preview, compileReceipt(document, { ...options, svg: true }));

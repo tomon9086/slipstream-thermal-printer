@@ -1,7 +1,22 @@
 import receiptline from 'receiptline';
 import sharp from 'sharp';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 
 export const HELLO = Buffer.from('1b4048656c6c6f2c20576f726c64210a0a0a0a0a1d5601', 'hex');
+
+// Local extension: expand standalone {image:@path.png} lines before ReceiptLine.
+// Paths are relative to the document, independent of the caller's working directory.
+export async function loadReceipt(file: string): Promise<string> {
+  const document = await readFile(file, 'utf8');
+  const lines = await Promise.all(document.split(/\r?\n/).map(async line => {
+    const match = line.match(/^([ \t]*)\{image:\s*@([^}\r\n]+)\}([ \t]*)$/);
+    if (!match) return line;
+    const image = await readFile(resolve(dirname(file), match[2].trim()));
+    return `${match[1]}{image:${image.toString('base64')}}${match[3]}`;
+  }));
+  return lines.join('\n');
+}
 
 export function printerOptions(cpl = 30): receiptline.Printer {
   if (!Number.isInteger(cpl) || cpl < 1 || cpl > 36) {
