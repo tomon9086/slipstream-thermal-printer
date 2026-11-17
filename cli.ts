@@ -5,7 +5,7 @@ import { compileReceipt, compileImage, loadReceipt, compileMarkedReceipt, compil
 import { makeSamples } from './src/samples.ts';
 import { sendToPrinter, withPrinter } from './src/usb.ts';
 import { paperLayout } from './src/paper.ts';
-import { inspectBlackMark, feedToMark, markedJobBytes, printMarkedJob } from './src/black-mark.ts';
+import { inspectBlackMark, feedToMark, markAlignmentBytes, markedJobBytes, printMarkedJob } from './src/black-mark.ts';
 import type { MarkedJob } from './src/black-mark.ts';
 
 const help = `Usage: node cli.ts <command> [file] [options]
@@ -24,6 +24,7 @@ Options:
   --preview <file.svg>   Save a ReceiptLine SVG preview without printing
   --paper-width <mm>     Paper width: 58 (default) or 80; receipt/image only
   --black-mark           Use marked-paper positioning; receipt/image only
+  --mark-offset-mm <mm>   Mark correction: positive forward, negative reverse; mark-feed/--black-mark
   --cut                  Cut after marked-paper positioning (requires --black-mark)
   --section <section>    samples: all (default) or japanese-qr
   --help                 Show this help`;
@@ -34,6 +35,7 @@ async function main() {
     output: { type: 'string' }, preview: { type: 'string' },
     'paper-width': { type: 'string' }, section: { type: 'string' },
     'black-mark': { type: 'boolean' }, cut: { type: 'boolean' },
+    'mark-offset-mm': { type: 'string' },
     help: { type: 'boolean' },
   } });
   if (values.help || positionals.length === 0) { console.log(help); return; }
@@ -44,12 +46,16 @@ async function main() {
   for (const [option, valid] of [['preview', command === 'receipt'],
     ['paper-width', command === 'receipt' || command === 'image'],
     ['black-mark', command === 'receipt' || command === 'image'],
+    ['mark-offset-mm', command === 'mark-feed' || Boolean(values['black-mark'])],
     ['cut', Boolean(values['black-mark'])],
     ['section', command === 'samples'], ['output', !['status', 'mark-status'].includes(command)]] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
   }
   const paperWidth = Number(values['paper-width'] ?? 58);
   paperLayout(paperWidth);
+  const offsetMm = values['mark-offset-mm'] === undefined ? undefined
+    : values['mark-offset-mm'].trim() === '' ? NaN : Number(values['mark-offset-mm']);
+  const alignment = markAlignmentBytes(offsetMm); // Validate before opening USB or writing files.
   if (command === 'status') {
     if (values['dry-run']) throw new Error('status requires a USB connection');
     return sendToPrinter(null, { statusOnly: true });
@@ -61,12 +67,12 @@ async function main() {
     return;
   }
   if (command === 'mark-feed') {
-    if (values.output) await writeFile(values.output, Buffer.from([0x1b, 0x40, 0x1d, 0x3c]));
+    if (values.output) await writeFile(values.output, Buffer.concat([Buffer.from([0x1b, 0x40]), alignment]));
     if (values['dry-run'] || values.output) {
-      console.log('Prepared ESC @ + GS < (1b 40 1d 3c); actual use requires marked paper and MS1-3 enabled');
+      console.log('Prepared marked-paper alignment; actual use requires marked paper and MS1-3 enabled');
       return;
     }
-    await withPrinter(feedToMark, { ignorePaperStatus: values['ignore-paper-status'] });
+    await withPrinter(io => feedToMark(io, offsetMm), { ignorePaperStatus: values['ignore-paper-status'] });
     console.log('Marked-paper alignment completed; inspect the physical position.');
     return;
   }
@@ -78,7 +84,7 @@ async function main() {
     case 'image':
       if (values['black-mark']) {
         marked = await compileMarkedImage(file, { paperWidth });
-        payload = markedJobBytes(marked, values.cut);
+        payload = markedJobBytes(marked, values.cut, offsetMm);
       } else payload = await compileImage(file, { paperWidth });
       break;
     case 'receipt': {
@@ -86,7 +92,7 @@ async function main() {
       const options = { paperWidth };
       if (values['black-mark']) {
         marked = compileMarkedReceipt(document, options);
-        payload = markedJobBytes(marked, values.cut);
+        payload = markedJobBytes(marked, values.cut, offsetMm);
       } else payload = compileReceipt(document, options);
       if (values.preview) await writeFile(values.preview, compileReceipt(document, { ...options, svg: true }));
       break;
@@ -98,7 +104,7 @@ async function main() {
   if (values['dry-run'] || values.output || values.preview) return;
   if (marked) {
     const job = marked;
-    await withPrinter(io => printMarkedJob(io, job, values.cut),
+    await withPrinter(io => printMarkedJob(io, job, values.cut, offsetMm),
       { ignorePaperStatus: values['ignore-paper-status'] });
     console.log('Marked-paper print stages completed; inspect the physical output.');
   } else await sendToPrinter(payload, { ignorePaperStatus: values['ignore-paper-status'] });

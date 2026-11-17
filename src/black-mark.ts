@@ -9,6 +9,18 @@ const FORM_FEED = Buffer.from([0x1d, 0x0c]);
 const CUT = Buffer.from([0x1d, 0x56, 1]);
 const completion = (tag: number) => Buffer.from([0x12, 0x71, tag]);
 
+export function markAlignmentBytes(offsetMm?: number): Buffer {
+  if (offsetMm === undefined) return ALIGN;
+  if (!Number.isFinite(offsetMm) || offsetMm < -9.25 || offsetMm > 31.875) {
+    throw new Error('--mark-offset-mm must be between -9.25 and 31.875');
+  }
+  const dots = Math.round(Math.abs(offsetMm) * 8);
+  // Pin the default 1/203-inch pitch: each unit resolves to one 0.125mm dot.
+  // GS A must immediately follow GS <, before any completion/status requests.
+  return Buffer.concat([Buffer.from([0x1d, 0x50, 0, 203]), ALIGN,
+    Buffer.from([0x1d, 0x41, offsetMm < 0 ? 1 : 0, dots])]);
+}
+
 // SII technical reference 6-14: responses are a stream, not one USB packet each.
 export class SiiReplyDecoder {
   private pending: Buffer = Buffer.alloc(0);
@@ -131,24 +143,26 @@ async function prepare(io: PrinterIO) {
   return client;
 }
 
-export async function feedToMark(io: PrinterIO) {
+export async function feedToMark(io: PrinterIO, offsetMm?: number) {
+  const alignment = markAlignmentBytes(offsetMm);
   const client = await prepare(io);
   await client.execute(Buffer.from([0x1b, 0x40]));
   await client.assertReady();
-  await client.execute(ALIGN);
+  await client.execute(alignment);
   await client.assertReady();
 }
 
 // For dry-run/export only. Actual printing fences and checks each stage separately.
-export function markedJobBytes(job: MarkedJob, cut = false): Buffer {
-  return Buffer.concat([job.setup, ALIGN, job.body, FORM_FEED, ...(cut ? [CUT] : [])]);
+export function markedJobBytes(job: MarkedJob, cut = false, offsetMm?: number): Buffer {
+  return Buffer.concat([job.setup, markAlignmentBytes(offsetMm), job.body, FORM_FEED, ...(cut ? [CUT] : [])]);
 }
 
-export async function printMarkedJob(io: PrinterIO, job: MarkedJob, cut = false) {
+export async function printMarkedJob(io: PrinterIO, job: MarkedJob, cut = false, offsetMm?: number) {
+  const alignment = markAlignmentBytes(offsetMm);
   const client = await prepare(io);
   await client.execute(job.setup);
   await client.assertReady();
-  await client.execute(ALIGN);
+  await client.execute(alignment);
   await client.assertReady();
   if (job.body.length) {
     await client.execute(job.body);

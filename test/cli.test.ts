@@ -53,9 +53,30 @@ test('black-mark CLI supports feed dry-run and marked receipt/image export witho
 
 test('invalid mark options fail before connecting', () => {
   for (const args of [['mark-status', '--dry-run'], ['receipt', 'examples/demo.receipt', '--cut', '--dry-run'],
-    ['raw', 'examples/demo.receipt', '--black-mark', '--dry-run']]) {
+    ['raw', 'examples/demo.receipt', '--black-mark', '--dry-run'],
+    ['receipt', 'examples/demo.receipt', '--mark-offset-mm=3', '--dry-run'],
+    ['status', '--mark-offset-mm=3'], ['samples', '--mark-offset-mm=3', '--dry-run'],
+    ...['', 'abc', 'NaN', 'Infinity', '-9.251', '31.876'].map(value => ['mark-feed', `--mark-offset-mm=${value}`, '--dry-run'])]) {
     const result = cli(...args);
     assert.equal(result.status, 1);
     assert.ok(!result.stdout.includes('Connected'));
+  }
+});
+
+test('CLI exports forward/reverse/zero correction for feed, receipt and image without USB', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'slipstream-offset-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const mm of [-3, 0, 3]) {
+    for (const args of [['mark-feed'], ['receipt', 'examples/mark-test.receipt', '--black-mark'],
+      ['image', 'examples/assets/slipstream-shop.png', '--black-mark']]) {
+      const output = join(directory, `${args[0]}-${mm}.bin`);
+      const result = cli(...args, `--mark-offset-mm=${mm}`, '--output', output);
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(!result.stdout.includes('Connected'));
+      const bytes = await readFile(output);
+      assert.ok(bytes.includes(Buffer.from([0x1d, 0x50, 0, 203, 0x1d, 0x3c, 0x1d, 0x41, mm < 0 ? 1 : 0, Math.abs(mm) * 8])));
+      if (args[0] === 'mark-feed') assert.equal(bytes.length, 12);
+      else assert.deepEqual(bytes.subarray(-2), Buffer.from([0x1d, 0x0c]));
+    }
   }
 });

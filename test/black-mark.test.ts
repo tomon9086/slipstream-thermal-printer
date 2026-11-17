@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SiiReplyDecoder, inspectBlackMark, feedToMark, printMarkedJob, markedJobBytes } from '../src/black-mark.ts';
+import { SiiReplyDecoder, inspectBlackMark, feedToMark, markAlignmentBytes, printMarkedJob, markedJobBytes } from '../src/black-mark.ts';
 import { compileMarkedReceipt } from '../src/receipt.ts';
 import type { PrinterIO } from '../src/usb.ts';
 
@@ -139,4 +139,42 @@ test('missing completion stops the job without later feed/cut commands or retran
   const p = mockPrinter({ timeoutAt: job.body.toString('hex') });
   await assert.rejects(printMarkedJob(p.io, job, true), /response failed/);
   assert.deepEqual(p.stages, [job.setup, Buffer.from([0x1d, 0x3c]), job.body]);
+});
+
+test('mark offsets round to dots, respect asymmetric limits and reject invalid values before I/O', async () => {
+  for (const [mm, direction, dots] of [[3, 0, 24], [-3, 1, 24], [0, 0, 0], [0.2, 0, 2],
+    [-9.25, 1, 74], [31.875, 0, 255]]) {
+    assert.deepEqual(markAlignmentBytes(mm), Buffer.from([0x1d, 0x50, 0, 203, 0x1d, 0x3c, 0x1d, 0x41, direction, dots]));
+  }
+  for (const mm of [NaN, Infinity, -Infinity, -9.251, 31.876]) {
+    const p = mockPrinter();
+    assert.throws(() => markedJobBytes(compileMarkedReceipt('test'), false, mm), /mark-offset-mm/);
+    await assert.rejects(feedToMark(p.io, mm), /mark-offset-mm/);
+    await assert.rejects(printMarkedJob(p.io, compileMarkedReceipt('test'), false, mm), /mark-offset-mm/);
+    assert.equal(p.writes.length, 0);
+  }
+});
+
+test('offset correction immediately follows alignment in live feed/print and exported jobs', async () => {
+  const job = compileMarkedReceipt('test');
+  for (const mm of [-3, 0, 3]) {
+    const alignment = markAlignmentBytes(mm);
+    const p = mockPrinter();
+    await feedToMark(p.io, mm);
+    assert.deepEqual(p.stages, [Buffer.from([0x1b, 0x40]), alignment]);
+    const q = mockPrinter();
+    await printMarkedJob(q.io, job, true, mm);
+    assert.deepEqual(q.stages, [job.setup, alignment, job.body, Buffer.from([0x1d, 0x0c]), Buffer.from([0x1d, 0x56, 1])]);
+    assert.deepEqual(Buffer.concat(q.stages), markedJobBytes(job, true, mm));
+  }
+});
+
+test('corrected alignment errors and timeouts prevent subsequent printing and cutting', async () => {
+  const alignment = markAlignmentBytes(3).toString('hex');
+  for (const failure of [{ failAt: alignment }, { timeoutAt: alignment }]) {
+    const p = mockPrinter(failure);
+    await assert.rejects(printMarkedJob(p.io, compileMarkedReceipt('test'), true, 3),
+      /mark-search paper jam|response failed/);
+    assert.equal(p.stages.length, 2);
+  }
 });

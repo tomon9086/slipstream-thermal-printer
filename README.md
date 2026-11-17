@@ -71,7 +71,7 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 ### ブラックマーク付き用紙（実験機能）
 
 初版は本体のマーク紙モード（MS1-3）が有効になっていることを前提にします。
-設定は読み取るだけで、メモリスイッチの書き換えやFLASHへの保存は行いません。
+メモリスイッチは読み取るだけで、書き換えやFLASHへの保存は行いません。
 無効なら紙送り・印字前にエラーにします。センサーが読める裏面マーク付きの対応用紙が必要です。
 
 ```sh
@@ -86,11 +86,21 @@ pnpm run print receipt examples/mark-test.receipt --black-mark --dry-run
 pnpm run print mark-feed --ignore-paper-status
 pnpm run print receipt examples/mark-test.receipt --black-mark --ignore-paper-status
 pnpm run print image image.png --black-mark --ignore-paper-status
+
+# ロールごとの位置差を補正（mm。正は順送り、負は逆送り）
+pnpm run print mark-feed --mark-offset-mm=3 --ignore-paper-status
+pnpm run print receipt examples/mark-test.receipt --black-mark --mark-offset-mm=-3 --ignore-paper-status
 ```
 
 USB権限がない場合は、通常印刷と同じく `sudo "$(command -v node)" cli.ts ...` を使います。
 `--black-mark` は `receipt` / `image` に対応し、初期化・印字開始位置合わせ・本文・カット位置への送りを
 分けて送信します。各段階で実行応答とエラー状態を読み、失敗時に後続の処理を送らず終了します。
+`--mark-offset-mm` は `mark-feed` と `receipt` / `image --black-mark` で使えます。
+既定位置に対する補正量であり、マークからラベル端までの実測距離そのものではありません。
+範囲は -9.25〜31.875mm、0.125mm単位に四捨五入し、FLASHには保存しません。
+省略時は補正コマンドを送らず、0を明示した場合は0の補正を送ります。
+USBを閉じるだけで補正が戻る前提にはせず、ロールごとに調整した値を毎回指定してください。
+本体側でマーク位置による補正の制限があり、センサー精度も±2mmなので、交換時は試し刷りで確認します。
 通常の自動カットと原稿内の `=` によるカットは省き、最後のカットは `--cut` を指定した場合だけ行います。
 ただし本体仕様として、マーク探索上限に達した場合は停止・カットする動作があります。
 `--cut` を省いても、エラー時に一切切られないという意味ではありません。
@@ -148,7 +158,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと33件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと37件のテストを確認済みです。
 紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
 80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。
