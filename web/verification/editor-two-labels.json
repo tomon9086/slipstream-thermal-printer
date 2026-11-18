@@ -1,0 +1,68 @@
+{
+  "sourceCommit": "8e6fb401396421962f001f1f21e9913ace581e28",
+  "browser": "159.0.8154.6",
+  "platform": "linux",
+  "startedAt": "2026-11-18T13:53:31.709Z",
+  "finishedAt": "2026-11-18T13:53:38.534Z",
+  "usbDevice": {
+    "vendorId": "0619",
+    "productId": "0123"
+  },
+  "paper": "normal-roll-confirmed-by-user",
+  "copies": 2,
+  "cut": true,
+  "label": {
+    "addressPx": 20,
+    "namePx": 32,
+    "threshold": 192,
+    "width": 360,
+    "height": 304,
+    "marginMm": {
+      "top": 1,
+      "right": 1,
+      "bottom": 1,
+      "left": 1
+    },
+    "png": "screenshots/editor-two-labels.png",
+    "pngSha256": "e74590013d354108538aca331f882cde98a53a8a339a0d04290a6aa2537cb226"
+  },
+  "printClicks": 1,
+  "rasterSha256": "f04a37c57d1558a2b9f493411c49e0f095d5e5e2f9f73bae35824866f52e0464",
+  "frames": [
+    {
+      "type": "raster",
+      "width": 360,
+      "height": 304,
+      "sha256": "f04a37c57d1558a2b9f493411c49e0f095d5e5e2f9f73bae35824866f52e0464",
+      "matchesPreview": true
+    },
+    {
+      "type": "cut",
+      "at": "2026-11-18T13:53:34.810Z",
+      "monotonicMs": 2933.300003051758
+    },
+    {
+      "type": "raster",
+      "width": 360,
+      "height": 304,
+      "sha256": "f04a37c57d1558a2b9f493411c49e0f095d5e5e2f9f73bae35824866f52e0464",
+      "matchesPreview": true
+    },
+    {
+      "type": "cut",
+      "at": "2026-11-18T13:53:37.066Z",
+      "monotonicMs": 5189.400001525879
+    }
+  ],
+  "cutIntervalMs": 2256.1,
+  "totalOutBytes": 27536,
+  "notice": "2枚の印字・カットの完了応答を確認しました。実紙をご確認ください。",
+  "log": "13:53:32  Connected: SII RP-E10 Series. (0619:0123), interface 0\n13:53:32  GET_PORT_STATUS: 0x18\n13:53:35  1/2枚：印字・カットの完了応答を確認\n13:53:37  2/2枚：印字・カットの完了応答を確認\n13:53:37  本体の元設定40バイトを復元・確認",
+  "completed": true,
+  "settingsRestored": true,
+  "settingsReadbackBytes": 40,
+  "physicalPrintVerified": false,
+  "blackMarkAlignmentVerified": false,
+  "temporaryPolicyRemoved": true,
+  "deviceOwnerRestored": true
+}

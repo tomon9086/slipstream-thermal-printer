@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-type UsbState = { events: { type: string; dots?: number; height?: number; width?: number; at?: number }[]; settings: number[]; transfers: number };
+type UsbState = { events: { type: string; dots?: number; height?: number; width?: number; at?: number }[]; settings: number[]; transfers: number; closes: number; replyBlocked: boolean };
 const usbState = (page: Page) => page.evaluate(() => (window as unknown as { editorUsb: UsbState }).editorUsb);
 
 async function readyPreview(page: Page) {
@@ -36,12 +36,15 @@ const rasterWork = (page: Page) => page.evaluate(() => {
   return { encodings, blocked };
 });
 
-async function mockPrinter(page: Page, failure: 'none' | 'short-raster' | 'missing-mark' = 'none') {
+type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
+
+async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
   await page.addInitScript(failure => {
-    const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), transfers: 0 };
+    const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), transfers: 0, closes: 0, replyBlocked: false };
     state.settings[0] = 251;
     Object.assign(window, { editorUsb: state });
     let bytes: number[] = [], queued: number[] = [], paperDots = 0;
+    let replyReleased = false;
     const parse = () => {
       while (bytes.length >= 2) {
         let length = 0;
@@ -88,7 +91,7 @@ async function mockPrinter(page: Page, failure: 'none' | 'short-raster' | 'missi
       vendorId: 0x0619, productId: 0x0123, productName: 'SII mock', opened: false,
       configuration: { configurationValue: 1, interfaces: [iface] },
       async open() { this.opened = true; }, async claimInterface() { iface.claimed = true; },
-      async close() { this.opened = false; iface.claimed = false; },
+      async close() { state.closes++; this.opened = false; iface.claimed = false; },
       async controlTransferIn() { return { status: 'ok', data: new DataView(new Uint8Array([0x18]).buffer) }; },
       async transferOut(_endpoint: number, chunk: Uint8Array) {
         state.transfers++;
@@ -96,6 +99,15 @@ async function mockPrinter(page: Page, failure: 'none' | 'short-raster' | 'missi
         bytes.push(...chunk); parse(); return { status: 'ok', bytesWritten: chunk.length };
       },
       async transferIn() {
+        const timeout = failure === 'reply-timeout-before-print'
+          || (failure === 'reply-timeout-after-raster' && state.events.some(event => event.type === 'raster' && event.height === 304))
+          || (failure === 'reply-timeout-after-cut' && state.events.some(event => event.type === 'cut'));
+        if (timeout && !replyReleased) {
+          state.replyBlocked = true;
+          await new Promise<void>(resolve => {
+            Object.assign(window, { finishEditorReply: () => { replyReleased = true; resolve(); } });
+          });
+        }
         if (!queued.length) throw new Error('テストの応答がありません。');
         // HEX応答や8バイトの自動ステータスがパケット境界をまたぐ状況を再現する。
         const chunk = new Uint8Array(queued.slice(0, 3)); queued = queued.slice(chunk.length);
@@ -470,6 +482,57 @@ test('画像の途中送信に失敗したら再送・カットをせず、接�
   await page.waitForTimeout(200);
   expect((await usbState(page)).transfers).toBe(transfers);
 });
+
+for (const scenario of [
+  { failure: 'reply-timeout-before-print', name: '印字前', rasters: 0, cuts: 0 },
+  { failure: 'reply-timeout-after-raster', name: '印字後', rasters: 1, cuts: 0 },
+  { failure: 'reply-timeout-after-cut', name: 'カット後', rasters: 1, cuts: 1 },
+] as const) {
+  test(`${scenario.name}の完了応答が来なければ後続の印字・カットを止め、遅延応答でも再開しない`, async ({ page }) => {
+    await mockPrinter(page, scenario.failure);
+    await page.goto('/editor');
+    await readyPreview(page);
+    await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('roll');
+    await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('2');
+    await page.getByText('印刷の詳細設定', { exact: true }).click();
+    const ignorePaper = page.getByRole('checkbox', { name: /状態ビット0x20を無視/ });
+    await ignorePaper.check();
+    await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+    await page.clock.install();
+    const print = page.getByRole('button', { name: 'このラベルを2枚印刷する' });
+    await print.click();
+    if (scenario.cuts) {
+      await expect.poll(async () => (await usbState(page)).events.some(event => event.type === 'raster')).toBe(true);
+      await page.clock.fastForward(2100);
+    }
+    await expect.poll(async () => (await usbState(page)).replyBlocked).toBe(true);
+    await page.clock.fastForward(5100);
+    await page.clock.fastForward(2100);
+    const connect = page.getByRole('button', { name: 'USB接続', exact: true });
+    await expect(connect).toBeEnabled();
+    await expect(print).toBeDisabled();
+    await expect(ignorePaper).not.toBeChecked();
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(scenario.rasters ? '電源を入れ直してください' : '本体応答の受信がタイムアウト');
+    const stopped = await usbState(page);
+    expect(stopped.closes).toBeGreaterThan(0);
+    expect(stopped.events.filter(event => event.type === 'raster')).toHaveLength(scenario.rasters);
+    expect(stopped.events.filter(event => event.type === 'cut')).toHaveLength(scenario.cuts);
+    if (!scenario.rasters) expect(stopped.settings).toEqual([251, ...Array(39).fill(255)]);
+
+    // 前のUSB要求が残る間は再接続も止め、遅延応答を受け取っても自動で続行しない。
+    await connect.click();
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('前のUSB接続が終了処理中');
+    await page.evaluate(() => { (window as unknown as { finishEditorReply: () => void }).finishEditorReply(); });
+    await page.clock.fastForward(5000);
+    const late = await usbState(page);
+    expect(late.transfers).toBe(stopped.transfers);
+    expect(late.events).toEqual(stopped.events);
+    await expect(print).toBeDisabled();
+    await connect.click();
+    await expect(page.getByText('● 接続済み', { exact: true })).toBeVisible();
+    expect((await usbState(page)).transfers).toBe(stopped.transfers);
+  });
+}
 
 test('黒帯が見つからなければ宛名とカットへ進まない', async ({ page }) => {
   await mockPrinter(page, 'missing-mark');
