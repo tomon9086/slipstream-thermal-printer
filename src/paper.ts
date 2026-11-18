@@ -1,4 +1,4 @@
-// Layout presets, not printer memory-switch settings. Preserve the tested 58mm layout.
+// レイアウトのプリセット。本体のメモリースイッチ設定とは別で、検証済みの58mmレイアウトを維持する。
 export function paperLayout(paperWidth = 58) {
   switch (paperWidth) {
     case 58: return { dots: 360, cpl: 30 };

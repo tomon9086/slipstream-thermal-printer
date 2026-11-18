@@ -41,6 +41,8 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 | コマンド | 内容 |
 | --- | --- |
 | `node cli.ts status` | USBステータス確認のみ |
+| `node cli.ts mark-status` | マーク紙モード・マークセンサー・用紙状態を確認（紙送りなし） |
+| `node cli.ts mark-feed` | マーク紙の印字開始位置へ合わせる |
 | `node cli.ts samples` | 従来と同じ英数字サイズ・日本語・SII内蔵QRの見本 |
 | `node cli.ts samples --section japanese-qr` | 日本語とQRだけの見本 |
 | `node cli.ts receipt examples/demo.receipt` | UTF-8のReceiptLine原稿を変換して印刷 |
@@ -54,7 +56,11 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 `--preview` は `receipt` のみ対応し、ブラウザー用SVGを保存します。
 プレビューの日本語書体は閲覧環境・Webフォントの読み込みに依存し、実機の内蔵書体とは異なります。
 
-`receipt` と `image` の幅指定は共通の `--paper-width=58|80`（mm）です。省略時は58です。
+`receipt` / `image` の `--cut` は、印刷後にカットする指定です。
+通常印刷では省略時も自動カットするため、指定しても同じ動作です。
+`--black-mark --cut` ではマークのカット位置へ送ってから切り、`--black-mark` だけなら最後のカットを省きます。
+
+`receipt` と `image` の幅指定は共通の `--paper-width=58|80`（mm）です。省略時の原稿幅は58です。
 従来の `--cpl` と `--width` はこのオプションに統一しました。
 
 | 用紙幅 | アプリの印字幅 | 半角文字数/行 |
@@ -62,9 +68,74 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 | 58mm（初期値） | 360ドット | 30桁 |
 | 80mm | 576ドット | 48桁 |
 
-58mmは実機確認済みのレイアウトを維持します。80mmは本体が80mm・576ドット設定の場合を想定しています。
-この指定はデータ生成の幅を切り替えるもので、プリンター本体の紙幅やメモリスイッチは変更しません。
+58mmは実機確認済みのレイアウトを維持し、80mmは576ドットのレイアウトです。
+`--paper-width` を明示して実機で印刷する場合は、本体の紙幅・有効ドット数（MS4）も一時的に合わせます。
+FLASHへは保存せず、印刷コマンドの処理完了を待って元のMS4へ戻し、読み戻して確認します。
+`mark-feed` でも指定できます。省略時は従来どおり本体設定を変更しません。
+プレビュー・dry-run・バイナリー保存ではUSBに接続せず、保存バイナリーにも設定変更を含めません。
+通信断や途中までのUSB書き込みなどで安全に復元できない場合はエラーにし、本体の再起動を案内します。
+ロールや仕切り板・スペーサーは指定した紙幅に合わせてください。
 80mmでの実機印刷は未確認です。ReceiptLineの出力方式は `sii`、文字コードは `shiftjis` を使います。
+
+### ブラックマーク付き用紙（実験機能）
+
+`pnpm run print` のマーク印刷は、本体のマーク紙モード（MS1-3）が有効になっていることを前提にします。
+このCLIはマーク紙モードを変更しません。紙幅の明示指定時だけMS4を一時変更し、FLASHへの保存は行いません。
+無効なら紙送り・印字前にエラーにします。センサーが読める裏面マーク付きの対応用紙が必要です。
+
+```sh
+# 実機の状態だけ取得。通常の用紙でも実行でき、紙は動かさない
+pnpm run print mark-status
+
+# 紙を動かさずコマンド生成だけ確認
+pnpm run print mark-feed --dry-run
+pnpm run print receipt examples/demo.receipt --black-mark --dry-run
+
+# 以下はマーク紙モードと対応用紙を準備してから実行する
+# label.receipt はラベルの高さに収まる自分のReceiptLine原稿に置き換える
+pnpm run print mark-feed --ignore-paper-status
+pnpm run print receipt label.receipt --black-mark --ignore-paper-status
+pnpm run print image image.png --black-mark --ignore-paper-status
+
+# マークのカット位置へ送ってからカットする
+pnpm run print receipt label.receipt --black-mark --cut --ignore-paper-status
+
+# ロールごとの位置差を補正（mm。正は順送り、負は逆送り）
+pnpm run print mark-feed --mark-offset=3 --ignore-paper-status
+pnpm run print receipt label.receipt --black-mark --mark-offset=-3 --ignore-paper-status
+```
+
+USB権限がない場合は、通常印刷と同じく `sudo "$(command -v node)" cli.ts ...` を使います。
+`--black-mark` は `receipt` / `image` に対応し、初期化・印字開始位置合わせ・本文・カット位置への送りを
+分けて送信します。各段階で実行応答とエラー状態を読み、失敗時に後続の処理を送らず終了します。
+`--mark-offset` の単位はmmで、`mark-feed` と `receipt` / `image --black-mark` で使えます。
+既定位置に対する補正量であり、マークからラベル端までの実測距離そのものではありません。
+範囲は -9.25〜31.875mm、0.125mm単位に四捨五入し、FLASHには保存しません。
+省略時は補正コマンドを送らず、0を明示した場合は0の補正を送ります。
+USBを閉じるだけで補正が戻る前提にはせず、ロールごとに調整した値を毎回指定してください。
+本体側でマーク位置による補正の制限があり、センサー精度も±2mmなので、交換時は試し刷りで確認します。
+通常の自動カットと原稿内の `=` によるカットは省き、最後のカットは `--cut` を指定した場合だけ行います。
+ただし本体仕様として、マーク探索上限に達した場合は停止・カットする動作があります。
+`--cut` を省いても、エラー時に一切切られないという意味ではありません。
+
+`--output` は位置合わせを含む印刷コマンドのバイナリーを保存します。
+`raw` で送る場合は、マーク紙モードの確認や段階ごとのエラー確認を行いません。
+プレビューは内容の見本であり、実機のマーク位置・カット位置は表現しません。
+本文がラベルの高さに収まることは別途確認してください。
+通常のデモは約54.4mmあり、46mm高のラベルには収まりません。
+
+#### 実機調査の確認結果
+
+実機では状態取得、紙幅の一時変更と復元、手書き黒帯の白→黒→白の検出、検出区間の2本線印字を確認しました。
+診断スクリプトの `GS FF` 後のカットでは、補正0で黒帯の終わりから約25mm先、+3mm指定の別条件では約31mm先でした。
+差は約6mmですが、検出精度±2mmを各測定に適用すると差の誤差は最大±4mmです。
+期待+3mmからのずれ約3mmはこの範囲内で、+3mm補正と整合します。単発・開始条件違いのため、精密な効果量と再現性は未確認です。
+通常カットでは75mmの目盛りが約63mmで切れ、印字位置〜カッター間は約12mmと測定できました。
+
+診断印刷は一時的なスクリプトで実行し、標準CLIとは別です。CLIの `GS <` 直後の補正と印刷ジョブ全体、
+市販マーク紙・ラベル境界・80mm実紙での印刷は未検証です。
+2026-11-18の実機調査は手書きマークを使い切ったため終了し、一時設定は元の40バイトに復元済みです。
+確認結果・未解決の点・次回の検証条件は [CONNECTION.md](CONNECTION.md) にまとめています。
 
 ### 原稿と実装
 
@@ -83,12 +154,14 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 
 - `src/receipt.ts`: ReceiptLine変換とsharpによる画像の前処理。
 - `src/paper.ts`: 58mm/80mmの印字幅・行幅の対応。
+- `src/black-mark.ts`: SII応答の復号、紙幅の一時設定、マーク状態の取得・位置合わせ・印刷。
 - `src/samples.ts`: 実機確認済みの文字サイズ・日本語・SII QR見本をNodeへ移植。
 - `src/usb.ts`: USB接続・ステータス確認・送信・解放。
 - `cli.ts`: 上記を呼び出すCLI。
 
 USBは `usb` のlibusb版（2.x）を使い、転送タイムアウトと実転送バイト数を確認します。
 最大4096バイトずつ順番に送り、途中エラー・短い転送では停止し、自動再送しません。
+紙送り中などの空の受信パケットは読み飛ばし、元の受信期限内で応答を待ちます。コマンドは再送しません。
 カーネルドライバーの自動切り離しは行いません。
 ReceiptLine出力はバイナリー文字列なので `Buffer.from(data, 'latin1')` で保持します。
 ReceiptLineのSII向けQRはライブラリ側で画像を生成します。
@@ -109,7 +182,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと19件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと47件のテストを確認済みです。
 紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
 80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。
