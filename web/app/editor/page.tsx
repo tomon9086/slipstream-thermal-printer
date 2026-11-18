@@ -125,10 +125,13 @@ export default function EditorPage() {
               {[30, 34, 38, 40, 46, 60].map(height => <option key={height} value={height}>{height}mm</option>)}
             </select></label>
           </div>
-          <div className={styles.marginGrid}>
-            {marginFields.map(([key, side]) => <label key={key}>{side}余白（mm）<input type="number" min={0} max={20} step={0.125}
-              value={Number.isFinite(draft[key]) ? draft[key] : ''} onChange={event => edit(key, event.target.valueAsNumber)} /></label>)}
-          </div>
+          <fieldset className={styles.marginSettings}>
+            <legend>画像内の余白</legend>
+            <div className={styles.marginGrid}>
+              {marginFields.map(([key, side]) => <label key={key}>{side}余白（mm）<input type="number" min={0} max={20} step={0.125}
+                value={Number.isFinite(draft[key]) ? draft[key] : ''} onChange={event => edit(key, event.target.valueAsNumber)} /></label>)}
+            </div>
+          </fieldset>
           <p className={styles.hint}>画像内の余白です。0.125mm（1ドット）刻み。本体の印刷できない余白（58mmロールでは左右各約2mm）が別に付きます。</p>
           <label>文字の描き方<select value={draft.textRenderer} onChange={event => edit('textRenderer', event.target.value as LabelDraft['textRenderer'])}>
             <option value="outline">通常フォント（Noto Sans JP）</option><option value="bitmap">ドットフォント（Unifont JP）</option>

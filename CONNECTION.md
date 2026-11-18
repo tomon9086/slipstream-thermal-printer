@@ -463,7 +463,10 @@ type PrinterCheckpoint = {
 マーク紙の戻し量は従来の校正値を使う。紙交換・手送り・再接続後は両用紙モードとも位置を不明に戻す。
 改善版も通常ロールで2枚印字・各カットし、432ドットのラスタ→カット→74ドット逆送り→ラスタ→カットの送信列を確認した。
 MS4の一時値`f7`、プレビューと送信ラスタの一致、カット間隔2258.5ms、元設定40バイトの復元を確認。
-実紙での改善量は利用者確認待ち。記録は [web/verification/editor-margins.json](web/verification/editor-margins.json) を参照。
+利用者が2枚目の上余白の減少を確認。写真で2枚の印字・カットを確認し、両方のQRから `https://example.com/` を読み取った。
+右余白は依然大きいとの指摘があり、紙の横位置・印刷原点の確認は継続中。
+余白設定の1mmは画像内の値で、QRには別途4セル（1.5mm）の白縁があり、本体の印字不能領域も加わる。
+記録は [web/verification/editor-margins.json](web/verification/editor-margins.json) を参照。
 
 ### 参照
 

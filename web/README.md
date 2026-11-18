@@ -171,7 +171,9 @@ QR読み取り・マーク紙の位置精度は未確認です。
 MS4の一時値は`f7`、2枚のラスタはプレビューと一致し、カット間隔2258.5ms、元設定40バイトの復元も確認しました。
 記録は [verification/editor-margins.json](verification/editor-margins.json)、
 画像は [verification/screenshots/editor-margins.png](verification/screenshots/editor-margins.png) にあります。
-この改善版の実紙の余白・印字・カットの確認は利用者待ちです。
+利用者の写真で2枚の印字・カットを確認し、本人から2枚目の上余白が減ったとの確認がありました。
+写真内のQRも2枚とも読み取れました。右余白は依然大きいとの指摘があり、紙の横位置・印刷原点の確認を継続しています。
+QRの黒い部分までの右余白には、画像内余白のほかにQRの白縁（4セル・1.5mm）が含まれます。
 
 ## Windowsの準備
 

@@ -86,7 +86,17 @@
   "completed": true,
   "settingsRestored": true,
   "settingsReadbackBytes": 40,
-  "physicalPrintVerified": false,
+  "physicalPrintVerified": true,
+  "physicalPrintVerification": {
+    "source": "user-confirmation-and-photo",
+    "result": "2枚の印字・カットを写真で確認。利用者が2枚目の上余白の減少を確認。右余白は依然大きいとの指摘あり"
+  },
+  "topMarginReductionVerified": true,
+  "rightMarginVerified": false,
+  "qrReadFromUserPhoto": {
+    "count": 2,
+    "decodedText": "https://example.com/"
+  },
   "marginImprovementVerified": false,
   "blackMarkAlignmentVerified": false,
   "temporaryPolicyRemoved": true,

@@ -24,6 +24,8 @@
 .toggle input { accent-color: #326044; margin: 0; }
 .twoColumns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 10px; }
 .marginGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.marginSettings { border: 0; padding: 0; margin: 16px 0 0; min-width: 0; }
+.marginSettings legend { padding: 0; color: #526254; font-size: 12px; font-weight: 600; }
 .divider { height: 1px; background: #e9ede5; margin: 24px 0; }
 .hint { font-size: 11px; line-height: 1.8; color: #859080; margin: 8px 0; }
 .editor button { font-size: 12px; font-weight: 600; border: 1px solid #29573d; border-radius: 6px; padding: 11px 16px; background: #29573d; color: #fff; transition: background .15s; }
