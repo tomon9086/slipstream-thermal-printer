@@ -24,7 +24,7 @@ Options:
   --preview <file.svg>   Save a ReceiptLine SVG preview without printing
   --paper-width <mm>     58 (default layout) or 80; receipt/image/mark-feed. Explicit: temporarily set printer width
   --black-mark           Use marked-paper positioning; receipt/image only
-  --mark-offset-mm <mm>   Mark correction: positive forward, negative reverse; mark-feed/--black-mark
+  --mark-offset <mm>     Mark correction: positive forward, negative reverse; mark-feed/--black-mark
   --cut                  Cut after marked-paper positioning (requires --black-mark)
   --section <section>    samples: all (default) or japanese-qr
   --help                 Show this help`;
@@ -35,7 +35,7 @@ async function main() {
     output: { type: 'string' }, preview: { type: 'string' },
     'paper-width': { type: 'string' }, section: { type: 'string' },
     'black-mark': { type: 'boolean' }, cut: { type: 'boolean' },
-    'mark-offset-mm': { type: 'string' },
+    'mark-offset': { type: 'string' },
     help: { type: 'boolean' },
   } });
   if (values.help || positionals.length === 0) { console.log(help); return; }
@@ -46,7 +46,7 @@ async function main() {
   for (const [option, valid] of [['preview', command === 'receipt'],
     ['paper-width', ['receipt', 'image', 'mark-feed'].includes(command)],
     ['black-mark', command === 'receipt' || command === 'image'],
-    ['mark-offset-mm', command === 'mark-feed' || Boolean(values['black-mark'])],
+    ['mark-offset', command === 'mark-feed' || Boolean(values['black-mark'])],
     ['cut', Boolean(values['black-mark'])],
     ['section', command === 'samples'], ['output', !['status', 'mark-status'].includes(command)]] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
@@ -54,8 +54,8 @@ async function main() {
   const paperWidth = Number(values['paper-width'] ?? 58);
   paperLayout(paperWidth);
   const printerWidth = values['paper-width'] === undefined ? undefined : paperWidth;
-  const offsetMm = values['mark-offset-mm'] === undefined ? undefined
-    : values['mark-offset-mm'].trim() === '' ? NaN : Number(values['mark-offset-mm']);
+  const offsetMm = values['mark-offset'] === undefined ? undefined
+    : values['mark-offset'].trim() === '' ? NaN : Number(values['mark-offset']);
   const alignment = markAlignmentBytes(offsetMm); // Validate before opening USB or writing files.
   if (command === 'status') {
     if (values['dry-run']) throw new Error('status requires a USB connection');

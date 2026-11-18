@@ -93,14 +93,14 @@ pnpm run print receipt examples/mark-test.receipt --black-mark --ignore-paper-st
 pnpm run print image image.png --black-mark --ignore-paper-status
 
 # ロールごとの位置差を補正（mm。正は順送り、負は逆送り）
-pnpm run print mark-feed --mark-offset-mm=3 --ignore-paper-status
-pnpm run print receipt examples/mark-test.receipt --black-mark --mark-offset-mm=-3 --ignore-paper-status
+pnpm run print mark-feed --mark-offset=3 --ignore-paper-status
+pnpm run print receipt examples/mark-test.receipt --black-mark --mark-offset=-3 --ignore-paper-status
 ```
 
 USB権限がない場合は、通常印刷と同じく `sudo "$(command -v node)" cli.ts ...` を使います。
 `--black-mark` は `receipt` / `image` に対応し、初期化・印字開始位置合わせ・本文・カット位置への送りを
 分けて送信します。各段階で実行応答とエラー状態を読み、失敗時に後続の処理を送らず終了します。
-`--mark-offset-mm` は `mark-feed` と `receipt` / `image --black-mark` で使えます。
+`--mark-offset` の単位はmmで、`mark-feed` と `receipt` / `image --black-mark` で使えます。
 既定位置に対する補正量であり、マークからラベル端までの実測距離そのものではありません。
 範囲は -9.25〜31.875mm、0.125mm単位に四捨五入し、FLASHには保存しません。
 省略時は補正コマンドを送らず、0を明示した場合は0の補正を送ります。

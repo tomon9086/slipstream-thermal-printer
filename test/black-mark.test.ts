@@ -154,9 +154,9 @@ test('mark offsets round to dots, respect asymmetric limits and reject invalid v
   }
   for (const mm of [NaN, Infinity, -Infinity, -9.251, 31.876]) {
     const p = mockPrinter();
-    assert.throws(() => markedJobBytes(compileMarkedReceipt('test'), false, mm), /mark-offset-mm/);
-    await assert.rejects(feedToMark(p.io, mm), /mark-offset-mm/);
-    await assert.rejects(printMarkedJob(p.io, compileMarkedReceipt('test'), false, mm), /mark-offset-mm/);
+    assert.throws(() => markedJobBytes(compileMarkedReceipt('test'), false, mm), /mark-offset/);
+    await assert.rejects(feedToMark(p.io, mm), /mark-offset/);
+    await assert.rejects(printMarkedJob(p.io, compileMarkedReceipt('test'), false, mm), /mark-offset/);
     assert.equal(p.writes.length, 0);
   }
 });

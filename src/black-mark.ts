@@ -13,7 +13,7 @@ const completion = (tag: number) => Buffer.from([0x12, 0x71, tag]);
 export function markAlignmentBytes(offsetMm?: number): Buffer {
   if (offsetMm === undefined) return ALIGN;
   if (!Number.isFinite(offsetMm) || offsetMm < -9.25 || offsetMm > 31.875) {
-    throw new Error('--mark-offset-mm must be between -9.25 and 31.875');
+    throw new Error('--mark-offset must be between -9.25 and 31.875 (mm)');
   }
   const dots = Math.round(Math.abs(offsetMm) * 8);
   // Pin the default 1/203-inch pitch: each unit resolves to one 0.125mm dot.
