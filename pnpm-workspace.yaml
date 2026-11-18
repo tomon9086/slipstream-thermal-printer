@@ -4,3 +4,5 @@ packages:
   - web
 allowBuilds:
   usb: true
+  sharp: false
+  unrs-resolver: false

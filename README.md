@@ -198,6 +198,7 @@ pnpm未導入の場合は [pnpmの導入手順](https://pnpm.io/installation) �
 ### 確認結果
 
 `pnpm typecheck` でCLI・Web両方の型チェック、`pnpm test` で両方のテストを実行できます。
+`pnpm lint` でWebのNext.js標準ESLint設定による検証を実行できます。
 CLIだけなら `pnpm --dir cli typecheck` と `pnpm --dir cli test` を使います。
 Webの実機印刷テストは通常のテストではスキップします。
 紙ステータス・実エラーによる停止、転送分割とバイト保持、途中エラー時の再送防止、USB解放、

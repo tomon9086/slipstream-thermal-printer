@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { closePrinter, connectPrinter, readStatus, sendBytes } from '../lib/printer';
-import type { PrinterSession } from '../lib/printer';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { closePrinter, connectPrinter, readStatus, sendBytes } from '@/lib/printer';
+import type { PrinterSession } from '@/lib/printer';
 
 export default function Page() {
   const printer = useRef<PrinterSession | null>(null);
@@ -14,7 +14,9 @@ export default function Page() {
   const [state, setState] = useState('idle');
   const [logs, setLogs] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const log = (text: string) => setLogs(old => [...old, `${new Date().toISOString()} ${text}`]);
+  const log = useCallback((text: string) => {
+    setLogs(old => [...old, `${new Date().toISOString()} ${text}`]);
+  }, []);
 
   useEffect(() => {
     const disconnected = (event: USBConnectionEvent) => {
@@ -30,7 +32,7 @@ export default function Page() {
       navigator.usb?.removeEventListener('disconnect', disconnected);
       if (printer.current) void closePrinter(printer.current).catch(() => {});
     };
-  }, []);
+  }, [log]);
 
   async function run(action: () => Promise<void>) {
     if (running.current) return;

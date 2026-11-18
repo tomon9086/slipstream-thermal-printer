@@ -4,6 +4,28 @@ Next.jsのクライアントから実機のUSBへ直接送信するテストア�
 サーバー側のUSB API、印刷キュー、`window.print()`は使用しません。
 対象はVID `0619` / PID `0123`、Configuration 1、Interface 0、Bulk OUT 1です。
 
+## プロジェクトの構成
+
+`create-next-app@16.4.6`の公式テンプレートを土台にしています。生成時の指定は以下です。
+
+```sh
+pnpm dlx create-next-app@16.4.6 web \
+  --ts --app --eslint --no-tailwind --no-src-dir \
+  --no-react-compiler --no-cache-components --import-alias '@/*' \
+  --use-pnpm --skip-install --disable-git --agents-md --no-agent-feedback --yes
+```
+
+生成された`tsconfig.json`をそのまま採用し、`next.config.ts`・ESLint・`.gitignore`も公式設定を使います。
+ESLintと`.gitignore`にはPlaywrightの生成物の除外だけを追加しています。
+生成時のサンプル画面・画像・Google FontsはWebUSB画面と既存のCSSに置き換えています。
+
+ワークスペースに合わせた変更は以下です。
+
+- 依存インストールはルートで行い、生成されたpnpmのビルド許可設定はルートの設定に統合。
+- パッケージ名と既存のReactパッチ版を維持し、Node.js 26に合わせた型定義を使用。
+- TypeScriptとESLintはテンプレートの指定を採用。
+- ローカル検証用に`dev`・`start`を`127.0.0.1`へ制限し、型チェックとPlaywrightのスクリプトを追加。
+
 ## 起動
 
 リポジトリルートで実行します。既存CLIと同じNode 26系・pnpmを使います。
@@ -53,6 +75,7 @@ Windowsでの実機動作は未確認です。
 
 ```sh
 pnpm --dir web exec playwright install chromium
+pnpm --dir web lint
 pnpm --dir web typecheck
 pnpm --dir web build
 pnpm --dir web test
