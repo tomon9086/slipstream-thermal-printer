@@ -75,8 +75,8 @@ FLASHへは保存せず、印刷コマンドの処理完了を待って元のMS4
 
 ### ブラックマーク付き用紙（実験機能）
 
-初版は本体のマーク紙モード（MS1-3）が有効になっていることを前提にします。
-CLIはマーク紙モードを変更しません。紙幅の明示指定時だけMS4を一時変更し、FLASHへの保存は行いません。
+`pnpm run print` のマーク印刷は、本体のマーク紙モード（MS1-3）が有効になっていることを前提にします。
+このCLIはマーク紙モードを変更しません。紙幅の明示指定時だけMS4を一時変更し、FLASHへの保存は行いません。
 無効なら紙送り・印字前にエラーにします。センサーが読める裏面マーク付きの対応用紙が必要です。
 
 ```sh
@@ -85,16 +85,17 @@ pnpm run print mark-status
 
 # 紙を動かさずコマンド生成だけ確認
 pnpm run print mark-feed --dry-run
-pnpm run print receipt examples/mark-test.receipt --black-mark --dry-run
+pnpm run print receipt examples/demo.receipt --black-mark --dry-run
 
 # 以下はマーク紙モードと対応用紙を準備してから実行する
+# label.receipt はラベルの高さに収まる自分のReceiptLine原稿に置き換える
 pnpm run print mark-feed --ignore-paper-status
-pnpm run print receipt examples/mark-test.receipt --black-mark --ignore-paper-status
+pnpm run print receipt label.receipt --black-mark --ignore-paper-status
 pnpm run print image image.png --black-mark --ignore-paper-status
 
 # ロールごとの位置差を補正（mm。正は順送り、負は逆送り）
 pnpm run print mark-feed --mark-offset=3 --ignore-paper-status
-pnpm run print receipt examples/mark-test.receipt --black-mark --mark-offset=-3 --ignore-paper-status
+pnpm run print receipt label.receipt --black-mark --mark-offset=-3 --ignore-paper-status
 ```
 
 USB権限がない場合は、通常印刷と同じく `sudo "$(command -v node)" cli.ts ...` を使います。
@@ -114,7 +115,38 @@ USBを閉じるだけで補正が戻る前提にはせず、ロールごとに�
 `raw` で送る場合は、マーク紙モードの確認や段階ごとのエラー確認を行いません。
 プレビューは内容の見本であり、実機のマーク位置・カット位置は表現しません。
 本文がラベルの高さに収まることは別途確認してください。
-`examples/mark-test.receipt` は短い確認用原稿です。通常のデモは約54.4mmあり、46mm高のラベルには収まりません。
+通常のデモは約54.4mmあり、46mm高のラベルには収まりません。
+
+#### 目盛り・二重線のexample
+
+[examples/mark-trace.ts](examples/mark-trace.ts) は、実験で使った診断印刷を再利用するexampleです。
+1mm目盛りと縦線を印刷し、センサーが黒帯を検出した区間だけ2本目の線を加えます。
+読み取りながら内容を変えるため、ReceiptLine原稿ではなくTypeScriptスクリプトです。
+
+```sh
+# 模擬センサー値でSVGを作る。USBには接続しない
+pnpm run mark-trace --preview /tmp/mark-trace.svg
+
+# 75mmの目盛りを印刷し、その場でカット（通常カット位置の測定）
+pnpm run mark-trace --paper-width=58 --length=75 --cut=current --ignore-paper-status
+
+# 1本の黒帯を読み終えたら印刷を止め、マークのカット位置へ送って切る
+pnpm run mark-trace --paper-width=58 --cut=mark --mark-offset=3 --ignore-paper-status
+```
+
+実機では黒帯がセンサー上を通るように紙をセットします。`--cut=mark` は次の黒帯も使うため、2本以上用意してください。
+このexampleはマーク紙モード・紙幅を一時的に設定し、初期化後に適用します。`--cut=mark` ではマーク探索上限も100mmに一時設定します。
+FLASHには保存せず、終了時に補正を含む変更した設定を復元・読み戻します。USB書き込み失敗時は追加コマンドを送らず、再起動を案内します。
+`--cut=none`（既定）はカットせず、`current` は印刷直後の位置、`mark` は `GS FF` で位置合わせ後にカットします。
+`--length` は印刷部分の最大長（既定75mm、1〜150mm）で、ヘッダーや最後の位置合わせの送りは含みません。
+`--mark-offset` はmm指定で `--cut=mark` に使います。黒帯を検出できない場合は最後の位置合わせ・カットを送らず停止します。
+
+紙には試験ID・補正値・カット方式を印字し、実機実行時は一時フォルダーへ `trace.svg` と `report.json` を保存します。
+保存先は表示され、`--record /tmp/my-trace` で指定もできます。SVGは検出ログから再描画した印字内容で、実際のカット位置は表現しません。
+USB権限が必要な環境では `sudo "$(command -v node)" examples/mark-trace.ts ...` を使います。
+整理後のexampleはプレビューと模擬I/Oで検証済みですが、新たな実機印刷は行っていません。
+
+#### 実機調査の確認結果
 
 実機では状態取得、紙幅の一時変更と復元、手書き黒帯の白→黒→白の検出、検出区間の2本線印字を確認しました。
 診断スクリプトの `GS FF` 後のカットでは、補正0で黒帯の終わりから約25mm先、+3mm指定の別条件では約31mm先でした。
@@ -122,7 +154,7 @@ USBを閉じるだけで補正が戻る前提にはせず、ロールごとに�
 期待+3mmからのずれ約3mmはこの範囲内で、+3mm補正と整合します。単発・開始条件違いのため、精密な効果量と再現性は未確認です。
 通常カットでは75mmの目盛りが約63mmで切れ、印字位置〜カッター間は約12mmと測定できました。
 
-これらの診断スクリプトと標準CLIは別の経路です。CLIの `GS <` 直後の補正と印刷ジョブ全体、
+このexampleも診断スクリプトの経路で、標準CLIとは別です。CLIの `GS <` 直後の補正と印刷ジョブ全体、
 市販マーク紙・ラベル境界・80mm実紙での印刷は未検証です。
 2026-11-18の実機調査は手書きマークを使い切ったため終了し、一時設定は元の40バイトに復元済みです。
 確認結果・未解決の点・次回の検証条件は [CONNECTION.md](CONNECTION.md) にまとめています。
@@ -172,7 +204,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと46件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと51件のテストを確認済みです。
 紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
 80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。

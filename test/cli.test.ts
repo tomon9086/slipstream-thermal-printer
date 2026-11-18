@@ -38,7 +38,7 @@ test('black-mark CLI supports feed dry-run and marked receipt/image export witho
   const feed = cli('mark-feed', '--dry-run');
   assert.equal(feed.status, 0, feed.stderr);
   assert.ok(!feed.stdout.includes('Connected'));
-  for (const [command, file] of [['receipt', 'examples/mark-test.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
+  for (const [command, file] of [['receipt', 'test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
     const output = join(directory, `${command}.bin`);
     const result = cli(command, file, '--black-mark', '--output', output);
     assert.equal(result.status, 0, result.stderr);
@@ -47,7 +47,7 @@ test('black-mark CLI supports feed dry-run and marked receipt/image export witho
     assert.deepEqual(bytes.subarray(-2), Buffer.from([0x1d, 0x0c]));
   }
   const svg = join(directory, 'preview.svg');
-  assert.equal(cli('receipt', 'examples/mark-test.receipt', '--black-mark', '--preview', svg).status, 0);
+  assert.equal(cli('receipt', 'test/fixtures/short.receipt', '--black-mark', '--preview', svg).status, 0);
   assert.match(await readFile(svg, 'utf8'), /<svg/);
 });
 
@@ -79,7 +79,7 @@ test('CLI exports forward/reverse/zero correction for feed, receipt and image wi
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-offset-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const mm of [-3, 0, 3]) {
-    for (const args of [['mark-feed'], ['receipt', 'examples/mark-test.receipt', '--black-mark'],
+    for (const args of [['mark-feed'], ['receipt', 'test/fixtures/short.receipt', '--black-mark'],
       ['image', 'examples/assets/slipstream-shop.png', '--black-mark']]) {
       const output = join(directory, `${args[0]}-${mm}.bin`);
       const result = cli(...args, `--mark-offset=${mm}`, '--output', output);

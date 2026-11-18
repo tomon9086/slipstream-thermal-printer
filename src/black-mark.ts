@@ -10,16 +10,20 @@ const FORM_FEED = Buffer.from([0x1d, 0x0c]);
 const CUT = Buffer.from([0x1d, 0x56, 1]);
 const completion = (tag: number) => Buffer.from([0x12, 0x71, tag]);
 
-export function markAlignmentBytes(offsetMm?: number): Buffer {
-  if (offsetMm === undefined) return ALIGN;
+export function markCorrectionBytes(offsetMm: number): Buffer {
   if (!Number.isFinite(offsetMm) || offsetMm < -9.25 || offsetMm > 31.875) {
     throw new Error('--mark-offset must be between -9.25 and 31.875 (mm)');
   }
   const dots = Math.round(Math.abs(offsetMm) * 8);
+  return Buffer.from([0x1d, 0x41, offsetMm < 0 ? 1 : 0, dots]);
+}
+
+export function markAlignmentBytes(offsetMm?: number): Buffer {
+  if (offsetMm === undefined) return ALIGN;
   // Pin the default 1/203-inch pitch: each unit resolves to one 0.125mm dot.
   // GS A must immediately follow GS <, before any completion/status requests.
   return Buffer.concat([Buffer.from([0x1d, 0x50, 0, 203]), ALIGN,
-    Buffer.from([0x1d, 0x41, offsetMm < 0 ? 1 : 0, dots])]);
+    markCorrectionBytes(offsetMm)]);
 }
 
 // SII technical reference 6-14: responses are a stream, not one USB packet each.
@@ -66,7 +70,7 @@ export class SiiReplyDecoder {
   }
 }
 
-class SiiClient {
+export class SiiClient {
   private decoder = new SiiReplyDecoder();
   private replies: Reply[] = [];
   private tag = 0;
