@@ -1,3 +1,8 @@
 engineStrict: true
+packages:
+  - cli
+  - web
 allowBuilds:
   usb: true
+  sharp: false
+  unrs-resolver: false

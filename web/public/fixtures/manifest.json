@@ -1,0 +1,10 @@
+{
+  "japanese-qr": {
+    "bytes": 527,
+    "sha256": "d9772f6f102cd6b2f7f29156ad36f9995fd308d5c19c7a0760fef74bdc4f3403"
+  },
+  "demo": {
+    "bytes": 7202,
+    "sha256": "d057358d45636dc9f10c4f42348c993bf03d6c3de3fb6c8ee57104e8ea7ffe30"
+  }
+}

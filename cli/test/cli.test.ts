@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 function cli(...args: string[]) {
-  return spawnSync(process.execPath, ['cli.ts', ...args], { cwd: root, encoding: 'utf8' });
+  return spawnSync(process.execPath, ['cli/index.ts', ...args], { cwd: root, encoding: 'utf8' });
 }
 
 test('CLIは両方の紙幅に対応し、USBに接続せず指定幅でプレビューを保存する', async t => {
@@ -38,7 +38,7 @@ test('ブラックマークCLIはUSBに接続せず送りのドライランと�
   const feed = cli('mark-feed', '--dry-run');
   assert.equal(feed.status, 0, feed.stderr);
   assert.ok(!feed.stdout.includes('Connected'));
-  for (const [command, file] of [['receipt', 'test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
+  for (const [command, file] of [['receipt', 'cli/test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
     const output = join(directory, `${command}.bin`);
     const result = cli(command, file, '--black-mark', '--output', output);
     assert.equal(result.status, 0, result.stderr);
@@ -47,7 +47,7 @@ test('ブラックマークCLIはUSBに接続せず送りのドライランと�
     assert.deepEqual(bytes.subarray(-2), Buffer.from([0x1d, 0x0c]));
   }
   const svg = join(directory, 'preview.svg');
-  assert.equal(cli('receipt', 'test/fixtures/short.receipt', '--black-mark', '--preview', svg).status, 0);
+  assert.equal(cli('receipt', 'cli/test/fixtures/short.receipt', '--black-mark', '--preview', svg).status, 0);
   assert.match(await readFile(svg, 'utf8'), /<svg/);
 });
 
@@ -66,7 +66,7 @@ test('不正なマークオプションは接続前にエラーにする', () =>
 test('通常印刷のcut指定は既定と同じデータを生成し、マーク印刷では位置合わせ後のカットだけを追加する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-cut-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  for (const [command, file] of [['receipt', 'test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
+  for (const [command, file] of [['receipt', 'cli/test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
     for (const marked of [false, true]) {
       const payloads: Buffer[] = [];
       for (const cut of [false, true]) {
@@ -85,7 +85,7 @@ test('通常印刷のcut指定は既定と同じデータを生成し、マー�
       }
     }
   }
-  for (const args of [['status'], ['mark-status'], ['mark-feed'], ['samples'], ['raw', 'test/fixtures/short.receipt']]) {
+  for (const args of [['status'], ['mark-status'], ['mark-feed'], ['samples'], ['raw', 'cli/test/fixtures/short.receipt']]) {
     const result = cli(...args, '--cut', '--dry-run');
     assert.equal(result.status, 1);
     assert.match(result.stderr, /--cut is not valid/);
@@ -109,7 +109,7 @@ test('CLIはUSBに接続せず、送り・原稿・画像の順送り・逆送�
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-offset-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const mm of [-3, 0, 3]) {
-    for (const args of [['mark-feed'], ['receipt', 'test/fixtures/short.receipt', '--black-mark'],
+    for (const args of [['mark-feed'], ['receipt', 'cli/test/fixtures/short.receipt', '--black-mark'],
       ['image', 'examples/assets/slipstream-shop.png', '--black-mark']]) {
       const output = join(directory, `${args[0]}-${mm}.bin`);
       const result = cli(...args, `--mark-offset=${mm}`, '--output', output);

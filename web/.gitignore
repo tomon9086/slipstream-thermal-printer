@@ -1,0 +1,45 @@
+# Gitの除外設定: https://help.github.com/articles/ignoring-files/
+
+# 依存パッケージ
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# テスト結果
+/coverage
+
+# Next.jsの生成物
+/.next/
+/out/
+
+# 本番用の生成物
+/build
+
+# その他のローカルファイル
+.DS_Store
+*.pem
+
+# デバッグログ
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# 環境変数ファイル（共有する場合は個別に除外を解除する）
+.env*
+
+# Vercelのローカル設定
+.vercel
+
+# TypeScriptの生成物
+*.tsbuildinfo
+next-env.d.ts
+
+# Playwrightの生成物
+/test-results/
+/playwright-report/

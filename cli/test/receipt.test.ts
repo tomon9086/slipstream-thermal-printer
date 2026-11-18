@@ -13,7 +13,7 @@ const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex')
 test('ローカルPNGの参照は原稿からの相対パスで解決し、通常の内容を保持する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-receipt-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
-  const image = await readFile(new URL('../examples/assets/slipstream-shop.png', import.meta.url));
+  const image = await readFile(new URL('../../examples/assets/slipstream-shop.png', import.meta.url));
   await writeFile(join(directory, 'logo.png'), image);
   const embedded = `{image:${image.toString('base64')}}`;
   await writeFile(join(directory, 'test.receipt'), `日本語\r\n{image:@logo.png}\r\n${embedded}\r\n`);
