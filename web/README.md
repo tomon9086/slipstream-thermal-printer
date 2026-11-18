@@ -53,6 +53,8 @@ ChromeまたはEdgeで `http://localhost:3123` を開きます。localhostはWeb
 
 ## Windowsの準備
 
+共通PowerShellとRP-E11用プロファイルによる確認・導入・検証は [WinUSB設定ツール](../winusb/README.md) を参照してください。
+
 RP-E11の対象USBインターフェースをZadig等でWinUSBへ割り当てます。
 USB IDを確認して、別のUSB機器を選ばないでください。WinUSBへ変更したRP-E11は
 通常のプリンタードライバーによる印刷との共用を想定しません。

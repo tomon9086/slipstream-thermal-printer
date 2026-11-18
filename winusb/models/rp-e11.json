@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "name": "SII RP-E11 WebUSB",
+  "vendorId": "0619",
+  "productId": "0123",
+  "usbInterface": 0,
+  "allowedServices": ["usbprint", "WinUSB"]
+}

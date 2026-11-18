@@ -1,0 +1,141 @@
+# WindowsのWebUSB用ドライバー設定
+
+共通PowerShellと機種別JSONで、対象USBインターフェースをWinUSBへ変更します。
+最初のプロファイルはSII RP-E11（今回の個体で観測したVID `0619` / PID `0123`）です。
+通常のWindowsプリンタードライバーによる印刷との共用は想定しません。
+このツールはUSBの割り当てだけを扱い、ブラウザの許可や印刷コマンドの機種対応は変更しません。
+
+## 必要な環境
+
+- Windows 10/11、Windows PowerShell 5.1またはPowerShell 7。`PnpDevice`モジュールが必要です。
+- `Install`では管理者権限。昇格や実行ポリシーの変更はスクリプトから行いません。
+- `Install`では、信頼できるソースからビルドした**libwdiの`wdi-simple.exe`**。
+  `Inspect`・`Verify`・`Install -WhatIf`では実行ファイルは不要です。
+
+### wdi-simpleの用意
+
+`wdi-simple`はZadigと同じlibwdiを使う公式CLIサンプルです。Windows標準コマンドではありません。
+確認したlibwdi v1.5.1の公式リリース添付はZadigのみで、CLIの実行ファイルは含まれません。
+`zadig.exe`をリネームしても利用できません。本リポジトリは外部EXEを同梱・自動取得しません。
+
+1. [libwdiの公式ビルド手順](https://github.com/pbatard/libwdi/wiki/Install)に従って、
+   Visual StudioのC++ビルド環境と、WinUSB用の再配布可能WDKコンポーネントなどを用意します。
+2. `git clone --branch v1.5.1 --depth 1 https://github.com/pbatard/libwdi.git` でソースを取得します。
+3. `libwdi.sln`を開き、`Release`と環境に合うプラットフォームで`wdi-simple`プロジェクトをビルドします。
+   ビルド条件は[公式ソリューション](https://github.com/pbatard/libwdi/blob/v1.5.1/libwdi.sln)も参照してください。
+4. 出力された`wdi-simple.exe`を、例えば`winusb/tools/`へ配置し、`--help`で起動を確認します。
+
+ビルド自体はこのLinux環境では未検証です。作成したインストーラーは対象Windows環境で検証してください。
+libwdiは生成したドライバーパッケージにローカルの証明書を使うため、組織の証明書・ドライバー導入ポリシーに
+よっては導入できません。署名検証を無効化する処理は含めていません。
+大量配布向けの署名済みパッケージや、第三者EXEの再配布はこの変更には含めません。
+
+## 使い方
+
+以下はリポジトリルートで実行します。対象プリンターは1台だけ接続してください。
+
+```powershell
+# 対象の親・子インターフェース、現在のサービスとINFを確認する。既定もInspect。
+.\winusb\Setup-WebUsbPrinter.ps1 -Model rp-e11 -Action Inspect | Format-List
+
+# 変更対象とCLI引数を表示する。ドライバー・ファイルは変更しない。
+.\winusb\Setup-WebUsbPrinter.ps1 -Model rp-e11 -Action Install -WhatIf
+```
+
+`Inspect`のHardwareIdsがデバイスマネージャーの対象と一致していることを確認します。
+Windows上の列挙結果は未確認のため、Interface 0だから必ず`MI_00`になるとは仮定していません。
+単一機器のIDと複合機器の`MI_00`の両方を候補とし、候補が1つでなければ変更を停止します。
+複合機器の親（`usbccgp`）や別のMIは変更対象から除きます。
+
+管理者として起動したPowerShellから実行します。
+
+```powershell
+# 指定したローカルEXEを使ってWinUSBへ変更する。
+.\winusb\Setup-WebUsbPrinter.ps1 -Model rp-e11 -Action Install `
+    -InstallerPath .\winusb\tools\wdi-simple.exe
+
+# OSの問題コード、WinUSBサービス、公開インターフェースGUIDを確認する。
+.\winusb\Setup-WebUsbPrinter.ps1 -Model rp-e11 -Action Verify | Format-List
+```
+
+`-Confirm`で実行前の確認も指定できます。実行中はUSBの抜き差しや別の同型機の接続を避けてください。
+検出とインストーラーによる変更は一つの原子的な操作ではありません。
+libwdi CLIはVID/PID/MIで対象を処理するため、同じIDの複数台を接続したまま使う用途には対応しません。
+
+`Inspect`・`Verify`は読み取りだけです。`Install`は以下の順で処理します。
+
+1. 候補数・現在のドライバーを確認し、実行直前にも再列挙する。
+2. 実行ごとのフォルダーに`before.json`を保存する。元のINF、InstanceId、使用EXEのSHA-256も含む。
+3. 元のINFが`oem数字.inf`なら`pnputil /export-driver`で`original-driver/`へ保存する。
+   保存に失敗したら導入を開始しない。Windows標準INFはエクスポートしない。
+4. `wdi-simple`を1回だけ実行する。単一機器なら`--iid`を付けず、複合機器の子ならMIを渡す。
+5. `after.json`を保存し、同じInstanceIdにWinUSBと有効なGUIDが設定され、問題コードが0かを確認する。
+
+既に正常なWinUSBなら再導入しません。失敗時の自動リトライ・自動ロールバックは行いません。
+インストーラー終了後でも再起動・抜き差しが必要な場合があります。その場合はOSの案内に従い、再度`Verify`します。
+`Verify`成功は、ブラウザからの通信・紙への印字成功を保証しません。
+続けて[Webアプリの手動操作](../web/README.md#起動)でUSB接続・ステータス取得・印刷を確認してください。
+
+記録と生成パッケージの保存先は既定で`winusb/state/日時/`です。`state/`と`tools/`はGit管理対象外です。
+別の保存先は`-StateDirectory C:\SlipStream\winusb-state`で指定できます。
+CLIのパス文字コードの問題を切り分ける際は、EXEと保存先を英数字のパスに置いて確認してください。
+
+## 元のドライバーへ戻す
+
+1. ブラウザとプリンターを使用するアプリを終了します。
+2. 対応する`before.json`でInstanceId・元のService・DriverInfPathを確認します。
+3. デバイスマネージャーで同じ対象を開き、「ドライバーを元に戻す」、または
+   「ドライバーの更新」→「コンピューターを参照」→「利用可能なドライバーの一覧から選択」で元のドライバーを選びます。
+4. 一覧にない追加ドライバーは`original-driver/`、またはメーカーの正規インストーラーから復元します。
+   Windows標準の`usbprint.inf`等はOSのドライバーを選びます。
+5. 必要に応じてUSBを抜き差しし、通常印刷と`Inspect`で確認します。
+
+バックアップのINFを登録する場合の例です。`/install`は既存ドライバーより順位が低いと切り替えないので、
+パッケージの登録成功だけで復元成功とは判断せず、上のデバイスマネージャーでの選択も行います。
+
+```powershell
+pnputil.exe /add-driver "C:\保存先\original-driver\*.inf" /subdirs /install
+```
+
+記録フォルダーは復元確認まで保持してください。元のプリンター設定・ポート・印刷キュー・証明書ストア全体の
+バックアップではありません。ドライバーパッケージを削除すると同じパッケージを使う別個体にも影響するため、
+このスクリプトに一括削除は実装していません。
+
+## 機種を増やす
+
+`models/rp-e11.json`を複製し、機種名のJSONを追加します。通常は共通PSの変更は不要です。
+
+| フィールド | 内容 |
+| --- | --- |
+| `schemaVersion` | 現在は`1` |
+| `name` | WinUSB割り当て後の表示名 |
+| `vendorId` / `productId` | 4桁の16進文字列。先頭0も保持する |
+| `usbInterface` | 対象のUSBインターフェース番号。複合機器ならMIとしても使う |
+| `allowedServices` | 変更を許可する現在のサービス名。未知のドライバーは既定で停止する |
+
+新しい機種では実際のUSB動作モードとWindowsのHardwareIdsを確認してください。
+RP-E11は`usbprint`からの変更と既存`WinUSB`の検証だけを許可しています。
+メーカー製サービスが表示される場合は、機能や復元方法を確認してからプロファイルを変更します。
+USB仮想COMやHID機器を一律にWinUSBへ変更するための仕組みではありません。
+
+Configuration・Bulk endpoint・印刷コマンド・文字コード・ステータス応答はこのJSONの対象外です。
+別機種をブラウザから印刷するには、それらのアプリ側対応も別途必要です。
+
+## 検証
+
+```powershell
+# Windows/LinuxのPowerShellで実行できる。USBや実ドライバーは変更しない。
+pwsh -NoProfile -File .\winusb\tests\Run-Tests.ps1
+```
+
+WindowsのPnpDevice・レジストリ・管理者判定・インストーラーをテスト内で置き換えて分岐を検証します。
+外部プロセスの失敗終了も、小さなPowerShell子プロセスで確認します。
+CIはLinuxのPowerShellとWindowsのPowerShell 7／Windows PowerShell 5.1で実行します。
+**Windows実機でのドライバー変更、libwdiのビルド、RP-E11へのWebUSB通信は未検証です。**
+
+参考:
+
+- [libwdi CLIの公式実装](https://github.com/pbatard/libwdi/blob/v1.5.1/examples/wdi-simple.c)
+- [libwdiの署名方式](https://github.com/pbatard/libwdi/wiki/Certification-Practice-Statement)
+- [Microsoft: WinUSBのインストールとDeviceInterfaceGUIDs](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/winusb-installation)
+- [Microsoft: PnPUtilの構文とドライバー順位](https://learn.microsoft.com/en-us/windows-hardware/drivers/devtest/pnputil-command-syntax)

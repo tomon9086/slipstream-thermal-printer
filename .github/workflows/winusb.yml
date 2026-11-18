@@ -1,0 +1,30 @@
+name: WinUSB scripts
+on:
+  pull_request:
+    paths:
+      - 'winusb/**'
+      - '.github/workflows/winusb.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'winusb/**'
+      - '.github/workflows/winusb.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: pwsh
+          - os: windows-latest
+            shell: pwsh
+          - os: windows-latest
+            shell: powershell
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: ドライバーを変更せずに分岐と失敗時の停止を検証
+        shell: ${{ matrix.shell }}
+        run: ./winusb/tests/Run-Tests.ps1
