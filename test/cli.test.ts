@@ -52,13 +52,43 @@ test('ブラックマークCLIはUSBに接続せず送りのドライランと�
 });
 
 test('不正なマークオプションは接続前にエラーにする', () => {
-  for (const args of [['mark-status', '--dry-run'], ['receipt', 'examples/demo.receipt', '--cut', '--dry-run'],
+  for (const args of [['mark-status', '--dry-run'],
     ['raw', 'examples/demo.receipt', '--black-mark', '--dry-run'],
     ['receipt', 'examples/demo.receipt', '--mark-offset=3', '--dry-run'],
     ['status', '--mark-offset=3'], ['samples', '--mark-offset=3', '--dry-run'],
     ...['', 'abc', 'NaN', 'Infinity', '-9.251', '31.876'].map(value => ['mark-feed', `--mark-offset=${value}`, '--dry-run'])]) {
     const result = cli(...args);
     assert.equal(result.status, 1);
+    assert.ok(!result.stdout.includes('Connected'));
+  }
+});
+
+test('通常印刷のcut指定は既定と同じデータを生成し、マーク印刷では位置合わせ後のカットだけを追加する', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'slipstream-cut-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  for (const [command, file] of [['receipt', 'test/fixtures/short.receipt'], ['image', 'examples/assets/slipstream-shop.png']]) {
+    for (const marked of [false, true]) {
+      const payloads: Buffer[] = [];
+      for (const cut of [false, true]) {
+        const output = join(directory, `${command}-${marked}-${cut}.bin`);
+        const result = cli(command, file, ...(marked ? ['--black-mark'] : []), ...(cut ? ['--cut'] : []), '--output', output);
+        assert.equal(result.status, 0, result.stderr);
+        assert.ok(!result.stdout.includes('Connected'));
+        payloads.push(await readFile(output));
+      }
+      if (marked) {
+        assert.deepEqual(payloads[0].subarray(-2), Buffer.from([0x1d, 0x0c]));
+        assert.deepEqual(payloads[1], Buffer.concat([payloads[0], Buffer.from([0x1d, 0x56, 1])]));
+      } else {
+        assert.deepEqual(payloads[1], payloads[0]);
+        assert.ok(payloads[0].includes(Buffer.from([0x1d, 0x56, 0x42, 0])));
+      }
+    }
+  }
+  for (const args of [['status'], ['mark-status'], ['mark-feed'], ['samples'], ['raw', 'test/fixtures/short.receipt']]) {
+    const result = cli(...args, '--cut', '--dry-run');
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--cut is not valid/);
     assert.ok(!result.stdout.includes('Connected'));
   }
 });

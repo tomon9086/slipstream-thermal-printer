@@ -25,7 +25,7 @@ Options:
   --paper-width <mm>     58 (default layout) or 80; receipt/image/mark-feed. Explicit: temporarily set printer width
   --black-mark           Use marked-paper positioning; receipt/image only
   --mark-offset <mm>     Mark correction: positive forward, negative reverse; mark-feed/--black-mark
-  --cut                  Cut after marked-paper positioning (requires --black-mark)
+  --cut                  Cut after printing; receipt/image only. Default: on normally, off with --black-mark
   --section <section>    samples: all (default) or japanese-qr
   --help                 Show this help`;
 
@@ -47,7 +47,7 @@ async function main() {
     ['paper-width', ['receipt', 'image', 'mark-feed'].includes(command)],
     ['black-mark', command === 'receipt' || command === 'image'],
     ['mark-offset', command === 'mark-feed' || Boolean(values['black-mark'])],
-    ['cut', Boolean(values['black-mark'])],
+    ['cut', command === 'receipt' || command === 'image'],
     ['section', command === 'samples'], ['output', !['status', 'mark-status'].includes(command)]] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
   }

@@ -56,6 +56,10 @@ export PATH="$HOME/.local/share/slipstream/node-v26.13.1-linux-x64/bin:$PATH"
 `--preview` は `receipt` のみ対応し、ブラウザー用SVGを保存します。
 プレビューの日本語書体は閲覧環境・Webフォントの読み込みに依存し、実機の内蔵書体とは異なります。
 
+`receipt` / `image` の `--cut` は、印刷後にカットする指定です。
+通常印刷では省略時も自動カットするため、指定しても同じ動作です。
+`--black-mark --cut` ではマークのカット位置へ送ってから切り、`--black-mark` だけなら最後のカットを省きます。
+
 `receipt` と `image` の幅指定は共通の `--paper-width=58|80`（mm）です。省略時の原稿幅は58です。
 従来の `--cpl` と `--width` はこのオプションに統一しました。
 
@@ -92,6 +96,9 @@ pnpm run print receipt examples/demo.receipt --black-mark --dry-run
 pnpm run print mark-feed --ignore-paper-status
 pnpm run print receipt label.receipt --black-mark --ignore-paper-status
 pnpm run print image image.png --black-mark --ignore-paper-status
+
+# マークのカット位置へ送ってからカットする
+pnpm run print receipt label.receipt --black-mark --cut --ignore-paper-status
 
 # ロールごとの位置差を補正（mm。正は順送り、負は逆送り）
 pnpm run print mark-feed --mark-offset=3 --ignore-paper-status
@@ -204,7 +211,7 @@ Shift JIS変換、QR画像生成、透明画像の白地合成を確認してい
 `samples` のデータは、実機確認済みデータのハッシュと一致することをテストしています。
 見本の英数字・日本語・SII内蔵QRは、ユーザーによる印字・QR読み取りの確認済みです。
 実機のステータス `0x38` を取得し、ロゴ追加後のデモ原稿全7202バイトのUSB送信に成功しました。
-pnpm・TypeScript・Node 26.13.1で型チェックと51件のテストを確認済みです。
+pnpm・TypeScript・Node 26.13.1で型チェックと52件のテストを確認済みです。
 紙幅指定の追加後も、58mmデモは従来と同じ7202バイトのデータです。
 80mmのプレビュー・バイナリー生成と、両幅での画像縮小をテストしています。
 Node版デモの紙の出力・QR読み取りはユーザーによる確認待ちです。
