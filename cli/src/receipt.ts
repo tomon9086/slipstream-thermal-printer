@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { paperLayout } from './paper.ts';
 
-// Expand local image references and fit standalone PNG images to the paper layout.
-// Paths are relative to the document, independent of the caller's working directory.
+// 原稿内の画像参照を展開し、PNG画像を選択した印字幅に収める。
+// 参照パスは実行時の作業ディレクトリではなく、原稿ファイルを基準に解決する。
 export async function loadReceipt(file: string, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<string> {
   paperLayout(paperWidth);
   const document = await readFile(file, 'utf8');
@@ -33,7 +33,7 @@ export function compileReceipt(document: string, options: ReceiptOptions & { svg
 export function compileReceipt(document: string, { paperWidth = 58, svg = false }: ReceiptOptions = {}): Buffer | string {
   const options = printerOptions(paperWidth);
   if (svg) return receiptline.transform(document, { ...options, command: 'svg' });
-  // ReceiptLine returns a binary string, not UTF-8. UTF-8 corrupts command/image bytes.
+  // ReceiptLineの出力はバイナリー文字列。UTF-8変換によるコマンド・画像の破損を防ぐ。
   return Buffer.from(receiptline.transform(document, options), 'latin1');
 }
 

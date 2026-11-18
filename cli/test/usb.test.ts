@@ -46,14 +46,14 @@ function printer({ status = Buffer.from([0x18]), statusError, short = false,
   return { events, chunks, endpoint, options };
 }
 
-test('status-only claims, reads, and closes without sending on 0x38', async () => {
+test('ステータス確認では0x38を取得し、印刷せずインターフェースを解放して閉じる', async () => {
   const p = printer({ status: Buffer.from([0x38]) });
   await sendToPrinter(null, { ...p.options, statusOnly: true });
   assert.deepEqual(p.chunks, []);
   assert.deepEqual(p.events, ['open', 'claim', 'release', 'close']);
 });
 
-test('paper bit requires override, while override cannot suppress actual error', async () => {
+test('紙ステータスの無視には明示指定が必要で、実際のエラーによる停止は回避できない', async () => {
   for (const [status, ignorePaperStatus] of [[0x38, false], [0x30, true]] as const) {
     const p = printer({ status: Buffer.from([status]) });
     await assert.rejects(sendToPrinter(Buffer.from('test'), { ...p.options, ignorePaperStatus }), /no print sent/);
@@ -62,7 +62,7 @@ test('paper bit requires override, while override cannot suppress actual error',
   }
 });
 
-test('override permits 0x38 and sends ordered, bounded chunks with binary fidelity', async () => {
+test('紙ステータス無視の指定により0x38で送信でき、バイト列を保って順番に分割転送する', async () => {
   const p = printer({ status: Buffer.from([0x38]) });
   const payload = Buffer.from(Array.from({ length: 10001 }, (_, i) => i % 256));
   await sendToPrinter(payload, { ...p.options, ignorePaperStatus: true });
@@ -72,14 +72,14 @@ test('override permits 0x38 and sends ordered, bounded chunks with binary fideli
   assert.deepEqual(p.events.slice(-2), ['release', 'close']);
 });
 
-test('short transfer is never retried and stops later chunks', async () => {
+test('転送バイト数が不足した場合は再送せず、後続チャンクの送信を停止する', async () => {
   const p = printer({ short: true });
   await assert.rejects(sendToPrinter(Buffer.alloc(9000), p.options), /Inspect receipt before retrying/);
   assert.equal(p.chunks.length, 1);
   assert.deepEqual(p.events.slice(-2), ['release', 'close']);
 });
 
-test('timeout after a successful chunk stops sending and preserves error through cleanup', async () => {
+test('一部送信後のタイムアウトでは送信を停止し、後処理で失敗しても元のエラーを保持する', async () => {
   const p = printer({ failChunk: 2, releaseError: new Error('release failed') });
   await assert.rejects(sendToPrinter(Buffer.alloc(9000), p.options), error => {
     assert.ok(error instanceof Error);
@@ -92,7 +92,7 @@ test('timeout after a successful chunk stops sending and preserves error through
   assert.equal(p.events.at(-1), 'close');
 });
 
-test('only a stalled status request may be skipped for printing', async () => {
+test('ステータス取得の省略は印刷時のSTALLだけに許可する', async () => {
   const pipe = Object.assign(new Error('stalled'), { errno: -9 });
   const p = printer({ statusError: pipe });
   await sendToPrinter(Buffer.from('test'), p.options);
@@ -105,25 +105,25 @@ test('only a stalled status request may be skipped for printing', async () => {
   assert.equal(r.chunks.length, 0);
 });
 
-test('malformed status blocks printing', async () => {
+test('不正なステータス応答を受け取った場合は印刷を停止する', async () => {
   const p = printer({ status: Buffer.alloc(0) });
   await assert.rejects(sendToPrinter(Buffer.from('test'), p.options), /response length/);
   assert.equal(p.chunks.length, 0);
 });
 
-test('failed claim closes device without releasing an unclaimed interface', async () => {
+test('占有に失敗した場合は未占有のインターフェースを解放せずデバイスを閉じる', async () => {
   const p = printer({ claimError: new Error('busy') });
   await assert.rejects(sendToPrinter(Buffer.from('test'), p.options), /busy/);
   assert.deepEqual(p.events, ['open', 'claim', 'close']);
 });
 
-test('cleanup failure is reported and device still closes', async () => {
+test('後処理の失敗を報告し、デバイスは閉じる', async () => {
   const p = printer({ releaseError: new Error('release failed') });
   await assert.rejects(sendToPrinter(Buffer.from('test'), p.options), /release failed/);
   assert.equal(p.events.at(-1), 'close');
 });
 
-test('missing device and empty payload fail before any transfer', async () => {
+test('機器が見つからない場合と印刷データが空の場合は転送前に失敗する', async () => {
   await assert.rejects(sendToPrinter(Buffer.from('x'), { findDevice: () => undefined }), /not found/);
   await assert.rejects(sendToPrinter(Buffer.alloc(0)), /non-empty Buffer/);
 });

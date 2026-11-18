@@ -1,4 +1,4 @@
-// USB transport for the observed RP-E11. Never detach a driver or retry a send.
+// 実機で確認したRP-E11用のUSB通信。ドライバーの切り離しや送信の再試行は行わない。
 export type UsbError = Error & { code?: string; errno?: number };
 export interface PrinterOutEndpoint {
   direction: 'out';
@@ -58,7 +58,7 @@ export async function sendToPrinter(payload: Buffer | null, {
     const status = await new Promise<unknown>((resolve, reject) => {
       device.controlTransfer(0xa1, 1, 0, 0, 1, (error, data) => {
         if (error) {
-          // GET_PORT_STATUS may be unsupported. Only a stalled request is optional.
+          // GET_PORT_STATUSに非対応の場合があるため、STALL時のみ印刷での取得省略を許す。
           if (error.code === 'LIBUSB_ERROR_PIPE' || error.errno === -9) resolve(null);
           else reject(error);
         } else resolve(data);
@@ -83,8 +83,8 @@ export async function sendToPrinter(payload: Buffer | null, {
     const endpoint = iface.endpoint(0x01);
     if (!isOutEndpoint(endpoint)) throw new Error('Bulk OUT 0x01 missing');
     endpoint.timeout = 15000;
-    // Bound transfers below the observed 16KiB receive buffer. No retries, including
-    // after a short transfer: some bytes may already have printed.
+    // 実機の受信バッファ16KiBに収まるように分割する。一部が印字済みの可能性があるため、
+    // 転送バイト数が不足した場合も再送しない。
     let accepted = 0;
     for (let offset = 0; offset < payload.length; offset += 4096) {
       const chunk = payload.subarray(offset, offset + 4096);
@@ -111,7 +111,7 @@ export async function sendToPrinter(payload: Buffer | null, {
     }
     throw error;
   } finally {
-    // Always close even if release fails, retaining the original transfer failure.
+    // インターフェース解放に失敗しても閉じる。転送時のエラーがあれば、そのエラーを優先する。
     let cleanupError: unknown;
     if (claimed && iface) {
       const claimedInterface = iface;

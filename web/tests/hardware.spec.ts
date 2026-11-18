@@ -16,7 +16,7 @@ test('実機にWebUSBから日本語・QR見本を1回送信する', async ({ pa
     await expect(page.getByTestId('state')).toHaveText('connected', { timeout: 15_000 });
     await page.getByRole('button', { name: 'ステータス取得' }).click();
     await expect(page.getByTestId('state')).toHaveText('status-read');
-    // This observed unit reports 0x38 even with paper loaded (CONNECTION.md).
+    // この個体は用紙が入っていても0x38を返す（CONNECTION.mdを参照）。
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: '1回印刷する' }).click();
     await expect(page.getByTestId('state')).toHaveText('sent', { timeout: 15_000 });

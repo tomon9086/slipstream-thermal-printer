@@ -10,7 +10,7 @@ import { makeSamples } from '../src/samples.ts';
 
 const sha256 = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
-test('local PNG references resolve relative to the receipt and preserve standard content', async t => {
+test('PNG参照は原稿の場所を基準に解決し、直接埋め込みと同じ画像を生成する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-receipt-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const image = await readFile(new URL('../../examples/assets/slipstream-shop.png', import.meta.url));
@@ -31,25 +31,25 @@ test('local PNG references resolve relative to the receipt and preserve standard
   await assert.rejects(loadReceipt(join(directory, 'missing.receipt')), { code: 'ENOENT' });
 });
 
-test('native samples match hardware-confirmed receipt fixtures', () => {
+test('内蔵コマンドの見本データは実機確認済みデータと一致する', () => {
   assert.equal(sha256(makeSamples()), '28ef4ada49cae62f61718047a7d932abfead4b9f22789e43c7b07a759ae8dc2b');
   assert.equal(sha256(makeSamples('japanese-qr')), 'd9772f6f102cd6b2f7f29156ad36f9995fd308d5c19c7a0760fef74bdc4f3403');
 });
 
-test('ReceiptLine encodes Japanese as Shift JIS and returns binary, not UTF-8', () => {
+test('ReceiptLineは日本語をShift JISに変換し、バイナリーとして保持する', () => {
   const payload = compileReceipt('日本語');
   assert.ok(Buffer.isBuffer(payload));
   assert.ok(payload.includes(Buffer.from('93fa967b8cea', 'hex')));
   assert.ok(!payload.includes(Buffer.from('日本語', 'utf8')));
 });
 
-test('SII QR is rendered as graphics rather than the unsupported Epson QR command', () => {
+test('SII向けQRは非対応のEpsonコマンドを使わず画像として生成する', () => {
   const payload = compileReceipt('{code:https://example.com/; option:qrcode,5,m}');
   assert.ok(payload.includes(Buffer.from([0x1d, 0x38, 0x4c])));
   assert.ok(!payload.includes(Buffer.from([0x1d, 0x28, 0x6b])));
 });
 
-test('SVG preview and width validation require no USB connection', () => {
+test('SVGプレビューと用紙幅の検証はUSB接続なしで実行できる', () => {
   assert.match(compileReceipt('こんにちは', { svg: true }), /<svg/);
   assert.match(compileReceipt('test', { svg: true }), /width="360px"/);
   assert.match(compileReceipt('test', { svg: true, paperWidth: 80 }), /width="576px"/);
@@ -58,19 +58,19 @@ test('SVG preview and width validation require no USB connection', () => {
   }
 });
 
-test('image conversion flattens transparent black pixels to white before printing', async () => {
+test('画像変換では印刷前に透明な黒の画素を白地に合成する', async () => {
   const input = await sharp({ create: { width: 8, height: 1, channels: 4,
     background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
   const payload = await compileImage(input);
   const marker = payload.indexOf(Buffer.from([0x1d, 0x38, 0x4c]));
   assert.ok(marker >= 0);
-  // GS 8 L has 7 framing bytes and 10 graphics parameters, followed by bitmap data.
+  // GS 8 Lはヘッダー7バイトと画像パラメーター10バイトの後にビットマップが続く。
   assert.equal(payload[marker + 17], 0);
-  assert.equal(payload.readUInt16LE(marker + 13), 8); // Small images are not enlarged.
+  assert.equal(payload.readUInt16LE(marker + 13), 8); // 小さな画像は拡大しない。
   await assert.rejects(compileImage(input, { paperWidth: 59 }), /paper-width/);
 });
 
-test('paper width constrains standalone, referenced, and embedded images with identical preview data', async t => {
+test('単独・参照・埋め込み画像はいずれも用紙の印字幅に収まり、プレビューの画像データも一致する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-width-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const input = await sharp({ create: { width: 720, height: 100, channels: 3,

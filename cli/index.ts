@@ -6,21 +6,25 @@ import { makeSamples } from './src/samples.ts';
 import { sendToPrinter } from './src/usb.ts';
 import { paperLayout } from './src/paper.ts';
 
-const help = `Usage: pnpm run print <command> [file] [options] (from repository root)
-Commands:
-  status                 Read USB status without printing
-  samples                Print font, Japanese, and native QR samples
-  receipt <file>         Print a UTF-8 ReceiptLine document
-  image <file>           Resize, flatten transparency, and print an image
-  raw <file>             Send an existing ESC/POS binary once
-Options:
-  --ignore-paper-status  Allow the observed 0x20 paper bit (check paper first)
-  --dry-run              Build data without opening USB
-  --output <file>        Save binary data without printing
-  --preview <file.svg>   Save a ReceiptLine SVG preview without printing
-  --paper-width <mm>     Paper width: 58 (default) or 80; receipt/image only
-  --section <section>    samples: all (default) or japanese-qr
-  --help                 Show this help`;
+const help = `使い方: pnpm run print <command> [file] [options]
+実行例:
+  リポジトリルート: pnpm run print receipt examples/demo.receipt --dry-run
+  cli/ 内:         pnpm run print receipt ../examples/demo.receipt --dry-run
+  入出力ファイルの相対パスは、実行時の作業ディレクトリを基準に解決します。
+コマンド:
+  status                 印刷せずにUSBステータスを取得
+  samples                文字サイズ・日本語・内蔵QRの見本を印刷
+  receipt <file>         UTF-8のReceiptLine原稿を印刷
+  image <file>           画像を縮小・白地合成して印刷
+  raw <file>             既存のESC/POSバイナリーを1回送信
+オプション:
+  --ignore-paper-status  用紙確認後、この個体の紙ステータス0x20を無視
+  --dry-run              USBに接続せずデータを生成
+  --output <file>        印刷せずバイナリーを保存
+  --preview <file.svg>   印刷せずSVGプレビューを保存（receiptのみ）
+  --paper-width <mm>     用紙幅: 58（初期値）または80（receipt/imageのみ）
+  --section <section>    見本: all（初期値）またはjapanese-qr（samplesのみ）
+  --help                 このヘルプを表示`;
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: {

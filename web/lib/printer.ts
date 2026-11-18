@@ -8,7 +8,7 @@ export async function connectPrinter(log: Log): Promise<USBDevice> {
   if (!navigator.usb) throw new Error('WebUSB対応のChrome / Edgeで開いてください。');
   const known = await navigator.usb.getDevices();
   const matches = known.filter(d => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID);
-  // A remembered grant / managed policy enables headless use without a chooser.
+  // 保存済みの許可や管理ポリシーがあれば、機器選択画面なしでヘッドレス接続できる。
   const device = matches.length === 1 ? matches[0] : await navigator.usb.requestDevice({
     filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }],
   });

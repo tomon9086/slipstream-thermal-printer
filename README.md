@@ -21,6 +21,8 @@ pnpm-lock.yaml       共通の依存ロックファイル
 
 依存パッケージとTypeScript設定は `cli/`・`web/` それぞれで管理します。
 以下のコマンドは、特記がない限りリポジトリルートから実行します。
+CLIは `cli/` 内でも `pnpm run print ...` で実行できます。入出力パスは実行時の作業ディレクトリ基準です。
+例えば `cli/` 内では `pnpm run print receipt ../examples/demo.receipt --dry-run` を使います。
 
 ## 使い方
 

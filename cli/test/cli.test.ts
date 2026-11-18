@@ -11,7 +11,7 @@ function cli(...args: string[]) {
   return spawnSync(process.execPath, ['cli/index.ts', ...args], { cwd: root, encoding: 'utf8' });
 }
 
-test('CLI accepts both paper widths and uses them in saved previews without USB access', async t => {
+test('CLIはUSBに接続せず両方の用紙幅でプレビューを保存できる', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const [paperWidth, dots] of [[58, 360], [80, 576]]) {
@@ -23,7 +23,7 @@ test('CLI accepts both paper widths and uses them in saved previews without USB 
   }
 });
 
-test('CLI rejects unsupported paper widths and does not silently accept obsolete width options', () => {
+test('CLIは未対応の用紙幅と廃止済みの幅指定オプションを拒否する', () => {
   for (const option of ['--paper-width=60', '--cpl=30', '--width=360']) {
     const result = cli('receipt', 'examples/demo.receipt', option, '--dry-run');
     assert.equal(result.status, 1);
