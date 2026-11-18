@@ -26,5 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: ドライバーを変更せずに分岐と失敗時の停止を検証
-        shell: ${{ matrix.shell }}
+        if: matrix.shell == 'pwsh'
+        shell: pwsh
+        run: ./winusb/tests/Run-Tests.ps1
+      - name: Windows PowerShell 5.1で同じ分岐を検証
+        if: matrix.shell == 'powershell'
+        shell: powershell
         run: ./winusb/tests/Run-Tests.ps1
