@@ -103,6 +103,10 @@ export async function sendBytes(session: PrinterSession, payload: Uint8Array<Arr
     if (!(status & 0x08)) throw new Error('プリンターがエラーを報告しています。送信を停止しました。');
     if ((status & 0x20) && !ignorePaper) throw new Error('紙ステータス0x20が立っています。用紙確認後にチェックを入れてください。');
   }
+  return writeBytes(session, payload, log);
+}
+
+export async function writeBytes(session: PrinterSession, payload: Uint8Array<ArrayBuffer>, log: Log = () => {}) {
   let accepted = 0;
   for (let offset = 0; offset < payload.length; offset += 4096) {
     const chunk = payload.subarray(offset, offset + 4096);

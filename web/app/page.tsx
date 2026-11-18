@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { closePrinter, connectPrinter, readStatus, sendBytes } from '@/lib/printer';
 import type { PrinterSession } from '@/lib/printer';
@@ -59,6 +60,7 @@ export default function Page() {
   return <main>
     <p className="eyebrow">SLIPSTREAM / USB LAB</p>
     <h1>RP-E11 WebUSB Test</h1>
+    <p><Link href="/editor">宛名ラベルの編集・画像化・印刷 →</Link></p>
     <p>ブラウザからUSBへ直接送信します。接続するプリンターはSII 0619:0123です。</p>
     <section>
       <h2>1. 接続</h2>

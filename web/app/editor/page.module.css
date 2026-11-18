@@ -1,0 +1,66 @@
+.editor { max-width: 1260px; padding: 0 32px; margin: 0 auto; color: #263b34; }
+.header { height: 84px; border-bottom: 1px solid #dbe2da; display: flex; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 10px; color: #214b3c; text-decoration: none; font-size: 13px; font-weight: 800; letter-spacing: .14em; }
+.brandIcon { display: grid; place-items: center; width: 30px; height: 32px; background: #285740; color: #fff; border-radius: 5px 5px 10px 5px; font-size: 20px; }
+.labLink { font-size: 12px; color: #657469; text-decoration: none; }
+.intro { display: flex; justify-content: space-between; align-items: end; padding: 36px 0 28px; gap: 16px; }
+.eyebrow { margin: 0 0 9px; color: #64806c; font-size: 10px; font-weight: 750; letter-spacing: .18em; }
+.intro h1 { margin: 0; font-size: 30px; font-weight: 650; letter-spacing: -.03em; }
+.intro p:not(.eyebrow) { margin: 10px 0 0; font-size: 13px; color: #788278; }
+.localBadge { padding: 7px 10px; border-radius: 5px; background: #e7eee5; font-size: 10px; white-space: nowrap; color: #4b7057; }
+.workspace { display: grid; grid-template-columns: 332px minmax(0, 1fr); gap: 24px; align-items: start; }
+.settings, .previewPanel, .outputPanel { background: #fff; border: 1px solid #dce2d9; border-radius: 10px; padding: 24px; margin: 0; min-width: 0; }
+.settings { position: sticky; top: 20px; }
+.fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sectionTitle { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.sectionTitle > span { font-family: monospace; color: #96a292; font-size: 11px; }
+.sectionTitle h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.fieldset > label, .twoColumns > label, .marginGrid > label, .advanced label { font-size: 12px; margin: 13px 0; display: block; color: #526254; line-height: 1.6; }
+.fieldset input:not([type=checkbox]):not([type=range]), .fieldset textarea, .fieldset select { box-sizing: border-box; width: 100%; border: 1px solid #d6ddd3; border-radius: 5px; background: #fdfefb; padding: 10px; margin-top: 6px; color: #263b34; font: inherit; font-size: 13px; line-height: 1.6; }
+.fieldset textarea { resize: vertical; min-height: 88px; }
+.fieldset input[type=range] { width: 100%; display: block; accent-color: #326044; margin: 12px 0 0; }
+.fieldset output { float: right; font-family: monospace; font-size: 11px; color: #788b7a; }
+.fieldset .toggle { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; }
+.toggle input { accent-color: #326044; margin: 0; }
+.twoColumns { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 10px; }
+.marginGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
+.divider { height: 1px; background: #e9ede5; margin: 24px 0; }
+.hint { font-size: 11px; line-height: 1.8; color: #859080; margin: 8px 0; }
+.editor button { font-size: 12px; font-weight: 600; border: 1px solid #29573d; border-radius: 6px; padding: 11px 16px; background: #29573d; color: #fff; transition: background .15s; }
+.editor button:hover:enabled { background: #1c402b; }
+.editor button:disabled { opacity: .4; cursor: not-allowed; }
+.editor button.secondary { background: #fff; color: #365d42; border-color: #cfd8cb; }
+.editor button.secondary:hover:enabled { background: #f0f5ed; }
+.editor button.textButton { background: transparent; border: 0; color: #6e816e; padding: 5px 0; font-size: 11px; font-weight: 500; }
+.editor :is(input, textarea, select, button, a):focus-visible { outline: 2px solid #5a8a66; outline-offset: 3px; }
+.rightColumn { display: grid; gap: 18px; min-width: 0; }
+.previewPanel { padding: 0; overflow: hidden; }
+.previewHeading { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e3e8df; padding: 16px 22px; font-size: 12px; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #6a9a62; margin-right: 7px; }
+.zoom { display: flex; align-items: center; gap: 7px; font-size: 10px; color: #7c897b; }
+.zoom select { border: 1px solid #dee4d9; padding: 4px 6px; border-radius: 4px; font-size: 10px; color: #455943; }
+.previewViewport { overflow: auto; padding: 28px 22px 16px; background-color: #ebefe7; background-image: radial-gradient(#c8d0c3 .7px, transparent .7px); background-size: 10px 10px; min-height: 378px; }
+.paper { position: relative; margin: 0 auto; background: #fff; box-shadow: 0 4px 6px #263b3409, 0 14px 28px #263b3410; }
+.captureSource { position: fixed; left: -100000px; top: 0; pointer-events: none; }
+.previewPlaceholder { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: #71816d; }
+.ruler { font-size: 10px; font-family: monospace; text-align: center; color: #8d9987; letter-spacing: .08em; margin-bottom: 12px; }
+.dimension { text-align: center; font-size: 10px; font-family: monospace; color: #7d8975; margin-top: 18px; white-space: nowrap; }
+.dimension span { margin: 0 7px; }
+.previewFooter { padding: 12px 22px; color: #88917f; font-size: 10px; line-height: 1.8; }
+.exportRow p { font-size: 12px; color: #778573; margin: 0 0 16px; }
+.buttonRow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.notice { padding: 10px 12px; background: #eef4e9; border-radius: 5px; font-size: 12px; color: #537448; }
+.warning { padding: 12px; background: #fff4df; border: 1px solid #eadbb8; border-radius: 6px; font-size: 12px; color: #8d6429; white-space: pre-line; }
+.warning p { margin: 3px 0; }
+.printerHeading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.printerHeading h3 { font-size: 13px; margin: 0; }
+.connected, .disconnected { font-size: 11px; color: #42805a; }
+.disconnected { color: #8b9588; }
+.advanced { border: 1px solid #e6eadf; border-radius: 6px; padding: 10px 12px; margin-top: 16px; }
+.advanced summary, .communication summary { cursor: pointer; font-size: 11px; color: #71816d; }
+.editor button.printButton { width: 100%; margin-top: 18px; padding: 14px; }
+.communication { margin-top: 20px; }
+.communication pre { min-height: 50px; font-size: 10px; margin-bottom: 0; }
+.footer { display: flex; justify-content: space-between; padding: 32px 0; font-size: 10px; letter-spacing: .1em; color: #94a08d; }
+@media (max-width: 900px) { .editor { padding: 0 18px; } .workspace { grid-template-columns: 280px minmax(0,1fr); gap: 16px; } .settings, .outputPanel { padding: 18px; } .localBadge { display: none; } }
+@media (max-width: 700px) { .header { height: 64px; } .intro { padding: 24px 0; } .intro h1 { font-size: 25px; } .workspace { grid-template-columns: 1fr; } .settings { position: static; } .previewViewport { padding-inline: 8px; } .labLink { font-size: 10px; } }
