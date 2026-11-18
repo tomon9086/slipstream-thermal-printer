@@ -1,0 +1,94 @@
+{
+  "sourceCommit": "5641d376ccebfdd57d0de4021b2f3eed78ee1ee4",
+  "browser": "159.0.8154.6",
+  "platform": "linux",
+  "startedAt": "2026-11-18T14:08:39.621Z",
+  "finishedAt": "2026-11-18T14:08:46.570Z",
+  "usbDevice": {
+    "vendorId": "0619",
+    "productId": "0123"
+  },
+  "paper": "normal-roll-confirmed-by-user",
+  "copies": 2,
+  "cut": true,
+  "firstLabelPosition": "unknown",
+  "label": {
+    "addressPx": 20,
+    "namePx": 32,
+    "threshold": 192,
+    "width": 432,
+    "height": 304,
+    "marginMm": {
+      "top": 1,
+      "right": 1,
+      "bottom": 1,
+      "left": 1
+    },
+    "png": "screenshots/editor-margins.png",
+    "pngSha256": "745b623b5ef8200e8479b81695da4cddc26ba42b43329ad0547b24cdbe507862"
+  },
+  "printClicks": 1,
+  "rasterSha256": "70b6f7e04726d259a2f052a05c5129a69c1b3cb49bd0f85bdf8597e0a28d18af",
+  "settingWrites": [
+    {
+      "index": 4,
+      "value": 247
+    },
+    {
+      "index": 1,
+      "value": 251
+    },
+    {
+      "index": 1,
+      "value": 251
+    },
+    {
+      "index": 4,
+      "value": 255
+    }
+  ],
+  "frames": [
+    {
+      "type": "raster",
+      "width": 432,
+      "height": 304,
+      "sha256": "70b6f7e04726d259a2f052a05c5129a69c1b3cb49bd0f85bdf8597e0a28d18af",
+      "matchesPreview": true
+    },
+    {
+      "type": "cut",
+      "at": "2026-11-18T14:08:42.673Z",
+      "monotonicMs": 2884
+    },
+    {
+      "type": "back",
+      "dots": 74
+    },
+    {
+      "type": "raster",
+      "width": 432,
+      "height": 304,
+      "sha256": "70b6f7e04726d259a2f052a05c5129a69c1b3cb49bd0f85bdf8597e0a28d18af",
+      "matchesPreview": true
+    },
+    {
+      "type": "cut",
+      "at": "2026-11-18T14:08:44.932Z",
+      "monotonicMs": 5142.5
+    }
+  ],
+  "backfeedAfterCutDots": 74,
+  "backfeedAfterCutMm": 9.25,
+  "cutIntervalMs": 2258.5,
+  "totalOutBytes": 33023,
+  "notice": "2枚の印字・カットの完了応答を確認しました。実紙をご確認ください。",
+  "log": "14:08:40  Connected: SII RP-E10 Series. (0619:0123), interface 0\n14:08:40  GET_PORT_STATUS: 0x18\n14:08:42  1/2枚：印字・カットの完了応答を確認\n14:08:43  カット位置から9.25mm戻して通常ロールの上余白を削減\n14:08:45  2/2枚：印字・カットの完了応答を確認\n14:08:45  本体の元設定40バイトを復元・確認",
+  "completed": true,
+  "settingsRestored": true,
+  "settingsReadbackBytes": 40,
+  "physicalPrintVerified": false,
+  "marginImprovementVerified": false,
+  "blackMarkAlignmentVerified": false,
+  "temporaryPolicyRemoved": true,
+  "deviceOwnerRestored": true
+}
