@@ -38,10 +38,10 @@ function printer({ marks = [false, true, true, false], failStep = 0, timeoutStep
         const body = Buffer.from(data.subarray(0, -3));
         stages.push(body);
         if (body[0] === 0x12 && body[1] === 0x77) {
-          assert.ok([1, 4, 8, 9, 10, 11].includes(body[2])); // No FLASH-setting selectors.
+          assert.ok([1, 4, 8, 9, 10, 11].includes(body[2])); // FLASHへ保存する設定番号を使わない。
           assert.equal(body[4], 0);
           settings[body[2] - 1] = body[3];
-          assert.ok(settings.readUInt16LE(9) <= 300); // Changing 300mm to 100mm must not pass through 356mm.
+          assert.ok(settings.readUInt16LE(9) <= 300); // 300mmから100mmへの変更途中に356mmを設定しない。
         }
         if (body[0] === 0x1d && body[1] === 0x76) {
           step++;
@@ -64,7 +64,7 @@ function printer({ marks = [false, true, true, false], failStep = 0, timeoutStep
   return { io, stages, writes, settings, original };
 }
 
-test('live trace uses sensor values for the second rail and keeps FF/correction adjacent before cutting', async () => {
+test('検出値に応じて二重線を印字し、FF直後に補正してからカットする', async () => {
   const p = printer();
   const run = report({ cut: 'mark', offset: 3 });
   await printTrace(p.io, run, () => {});
@@ -89,7 +89,7 @@ test('live trace uses sensor values for the second rail and keeps FF/correction 
   assert.ok(!svg.includes('<rect x="120" y="48"'));
 });
 
-test('none/current cut modes complete the requested length and preserve the paper settings', async () => {
+test('カットなし・通常カットでは指定長を印字して紙幅設定を復元する', async () => {
   for (const cut of ['none', 'current'] as const) {
     const p = printer();
     const run = report({ cut, paperWidth: 80, length: 5 });
@@ -103,7 +103,7 @@ test('none/current cut modes complete the requested length and preserve the pape
   }
 });
 
-test('missing marks and mark-search errors stop before subsequent feed or cut and restore settings', async () => {
+test('マーク未検出・探索エラーでは後続の送りとカットを中止して設定を復元する', async () => {
   for (const fixture of [{ marks: [false, false] }, { failFormFeed: true }]) {
     const p = printer(fixture);
     const run = report({ cut: 'mark', length: 5 });
@@ -115,7 +115,7 @@ test('missing marks and mark-search errors stop before subsequent feed or cut an
   }
 });
 
-test('failed writes stop every later command; missing completion restores settings without retrying a strip', async () => {
+test('書き込み失敗後は送信を停止し、完了応答がない場合は印字を再送せず設定を復元する', async () => {
   const p = printer({ failStep: 2 });
   const run = report({ cut: 'mark' });
   await assert.rejects(printTrace(p.io, run, () => {}), /USB write failed/);
@@ -129,7 +129,7 @@ test('failed writes stop every later command; missing completion restores settin
   assert.deepEqual(q.settings, q.original);
 });
 
-test('trace preview and argument validation never require USB', async t => {
+test('目盛りのプレビューと引数の検証はUSBに接続しない', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-trace-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const width of [58, 80]) {

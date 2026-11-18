@@ -11,7 +11,7 @@ function cli(...args: string[]) {
   return spawnSync(process.execPath, ['cli.ts', ...args], { cwd: root, encoding: 'utf8' });
 }
 
-test('CLI accepts both paper widths and uses them in saved previews without USB access', async t => {
+test('CLIは両方の紙幅に対応し、USBに接続せず指定幅でプレビューを保存する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const [paperWidth, dots] of [[58, 360], [80, 576]]) {
@@ -23,7 +23,7 @@ test('CLI accepts both paper widths and uses them in saved previews without USB 
   }
 });
 
-test('CLI rejects unsupported paper widths and does not silently accept obsolete width options', () => {
+test('CLIは非対応の紙幅と廃止した紙幅オプションを拒否する', () => {
   for (const option of ['--paper-width=60', '--cpl=30', '--width=360']) {
     const result = cli('receipt', 'examples/demo.receipt', option, '--dry-run');
     assert.equal(result.status, 1);
@@ -32,7 +32,7 @@ test('CLI rejects unsupported paper widths and does not silently accept obsolete
   assert.equal(cli('samples', '--paper-width=80', '--dry-run').status, 1);
 });
 
-test('black-mark CLI supports feed dry-run and marked receipt/image export without USB access', async t => {
+test('ブラックマークCLIはUSBに接続せず送りのドライランと原稿・画像の書き出しができる', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-mark-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const feed = cli('mark-feed', '--dry-run');
@@ -51,7 +51,7 @@ test('black-mark CLI supports feed dry-run and marked receipt/image export witho
   assert.match(await readFile(svg, 'utf8'), /<svg/);
 });
 
-test('invalid mark options fail before connecting', () => {
+test('不正なマークオプションは接続前にエラーにする', () => {
   for (const args of [['mark-status', '--dry-run'], ['receipt', 'examples/demo.receipt', '--cut', '--dry-run'],
     ['raw', 'examples/demo.receipt', '--black-mark', '--dry-run'],
     ['receipt', 'examples/demo.receipt', '--mark-offset=3', '--dry-run'],
@@ -63,7 +63,7 @@ test('invalid mark options fail before connecting', () => {
   }
 });
 
-test('mark-feed accepts paper width for actual positioning without USB access during export', async t => {
+test('mark-feedは位置合わせ用の紙幅を受け取り、書き出し時はUSBに接続しない', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-feed-width-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const width of [58, 80]) {
@@ -75,7 +75,7 @@ test('mark-feed accepts paper width for actual positioning without USB access du
   }
 });
 
-test('CLI exports forward/reverse/zero correction for feed, receipt and image without USB', async t => {
+test('CLIはUSBに接続せず、送り・原稿・画像の順送り・逆送り・ゼロ補正を書き出せる', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-offset-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   for (const mm of [-3, 0, 3]) {

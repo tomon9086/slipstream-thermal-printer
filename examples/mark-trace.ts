@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Live ruler: print seven raster rows, feed one dot, settle, then read the sensor.
+// 実機の目盛り印刷はラスターデータ7行と1ドットの紙送りを繰り返し、待機後にセンサーを読む。
 import { parseArgs } from 'node:util';
 import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -39,7 +39,7 @@ const help = `Usage: pnpm run mark-trace [options]
 With --cut=mark, stop after one black band, then feed to the marked cut position.
 Live runs temporarily enable mark mode and restore all changed settings without FLASH writes.`;
 
-// Five-by-seven digits, doubled for a readable ruler label every 10mm.
+// 5×7ドットの数字を2倍に拡大し、10mmごとの目盛りを読みやすくする。
 const digits = ['01110100011001110101110011000101110', '00100011000010000100001000010001110',
   '01110100010000100010001000100011111', '11110000010000101110000010000111110',
   '00010001100101010010111110001000010', '11111100001000011110000010000111110',
@@ -62,7 +62,7 @@ export function traceStrip(mm: number, marked: boolean, paperWidth: number): Buf
       }
     }
   }
-  return data; // Last row is the one-dot normal feed, not another printed raster row.
+  return data; // 最終行は1ドットの通常紙送りに相当し、ラスターデータとしては印字しない。
 }
 
 function header(report: TraceReport): string[] {
@@ -120,7 +120,7 @@ export async function printTrace(io: PrinterIO, report: TraceReport, log: (text:
   const original = await client.settings();
   report.originalSettings = original.toString('hex');
   await state();
-  await client.execute(Buffer.from([0x1b, 0x40])); // Initialize before applying temporary settings.
+  await client.execute(Buffer.from([0x1b, 0x40])); // 一時設定を適用する前に初期化する。
   const ms4 = (original[3] & ~0x18) | (report.paperWidth === 80 ? 0x18 : 0);
   const changes = [[4, ms4], [1, original[0] | 4], ...(report.cut === 'mark' ? [[11, 0], [10, 100]] : [])];
   const attempted: number[] = [];
@@ -153,7 +153,7 @@ export async function printTrace(io: PrinterIO, report: TraceReport, log: (text:
     await state();
     if (report.cut === 'mark') {
       if (!sawMark) throw new Error('No mark found; no form-feed or cut sent');
-      attempted.push(8, 9); // Restore the temporary correction even if it is absent from MS readback.
+      attempted.push(8, 9); // 一時補正がMSの読み戻しに現れなくても、元の補正値に戻す。
       await client.execute(Buffer.concat([Buffer.from([0x1d, 0x0c]), markCorrectionBytes(report.offset)]));
       await state();
     }
@@ -208,7 +208,7 @@ async function main() {
   }
   const directory = values.record ?? await mkdtemp(join(tmpdir(), 'slipstream-mark-trace-'));
   if (values.record) await mkdir(directory, { recursive: true });
-  else await chmod(directory, 0o755); // Make artifacts readable when USB access requires sudo.
+  else await chmod(directory, 0o755); // USB接続にsudoが必要な場合も、保存したファイルをユーザーが読めるようにする。
   try {
     await withPrinter(io => printTrace(io, report), { ignorePaperStatus: values['ignore-paper-status'] });
   } finally {

@@ -56,7 +56,7 @@ async function main() {
   const printerWidth = values['paper-width'] === undefined ? undefined : paperWidth;
   const offsetMm = values['mark-offset'] === undefined ? undefined
     : values['mark-offset'].trim() === '' ? NaN : Number(values['mark-offset']);
-  const alignment = markAlignmentBytes(offsetMm); // Validate before opening USB or writing files.
+  const alignment = markAlignmentBytes(offsetMm); // USB接続やファイルへの書き込み前に検証する。
   if (command === 'status') {
     if (values['dry-run']) throw new Error('status requires a USB connection');
     return sendToPrinter(null, { statusOnly: true });

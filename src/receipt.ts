@@ -5,8 +5,8 @@ import { dirname, resolve } from 'node:path';
 import { paperLayout } from './paper.ts';
 import type { MarkedJob } from './black-mark.ts';
 
-// Expand local image references and fit standalone PNG images to the paper layout.
-// Paths are relative to the document, independent of the caller's working directory.
+// ローカル画像の参照を展開し、単独のPNG画像を用紙のレイアウトに収める。
+// パスは原稿からの相対パスとし、呼び出し元の作業ディレクトリに依存させない。
 export async function loadReceipt(file: string, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<string> {
   paperLayout(paperWidth);
   const document = await readFile(file, 'utf8');
@@ -34,7 +34,7 @@ export function compileReceipt(document: string, options: ReceiptOptions & { svg
 export function compileReceipt(document: string, { paperWidth = 58, svg = false }: ReceiptOptions = {}): Buffer | string {
   const options = printerOptions(paperWidth);
   if (svg) return receiptline.transform(document, { ...options, command: 'svg' });
-  // ReceiptLine returns a binary string, not UTF-8. UTF-8 corrupts command/image bytes.
+  // ReceiptLineはバイナリー文字列を返す。UTF-8にするとコマンドや画像のバイト列が壊れる。
   return Buffer.from(receiptline.transform(document, options), 'latin1');
 }
 
@@ -63,7 +63,7 @@ export function compileMarkedReceipt(document: string, { paperWidth = 58 }: { pa
       return '';
     },
     close() { return ''; },
-    // Also suppress cuts requested by '=' inside the document.
+    // 原稿内の「=」によるカット指定も無効にする。
     cut() { return ''; },
   };
   const body = Buffer.from(receiptline.transform(document,

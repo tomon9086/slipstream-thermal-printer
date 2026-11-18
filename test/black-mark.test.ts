@@ -20,7 +20,7 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '',
     async write(data) {
       writes.push(Buffer.from(data));
       if (data.equals(Buffer.from([0x12, 0x71, 15]))) {
-        // Old status/ack, an initialization, fragmented ASB, then our fence.
+        // 古い状態・完了応答、初期化通知、分割されたASBに続けて今回の同期用応答を返す。
         queued = Buffer.concat([queued, Buffer.from([0xa7, 0x80, 0xb2, 0xc0, ...Array(7).fill(0xd0), 0x8f])]);
       } else if (data.equals(Buffer.from([0x12, 0x6c, 0]))) {
         queued = Buffer.concat([queued, encodeHex(settings),
@@ -33,12 +33,12 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '',
         const body = Buffer.from(data.subarray(0, -3));
         stages.push(body);
         if (body[0] === 0x12 && body[1] === 0x77) {
-          assert.deepEqual([body[2], body.length, body[4]], [4, 5, 0]); // MS4 only, no FLASH bit.
+          assert.deepEqual([body[2], body.length, body[4]], [4, 5, 0]); // MS4だけを変更し、FLASH保存ビットは立てない。
           settings[3] = body[3];
         }
         if (body.toString('hex') === failAt) errors |= 4;
         if (body.toString('hex') !== timeoutAt) {
-          // Ignore an unrelated completion tag and wait for the matching one.
+          // 無関係な完了タグを無視し、対応するタグを待つ。
           queued = Buffer.concat([queued, Buffer.from([0x80, 0x80 | data.at(-1)!])]);
         }
       }
@@ -46,7 +46,7 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '',
     async read(timeout) {
       assert.ok(timeout !== undefined && timeout > 0 && timeout <= 5000);
       if (!queued.length) throw new Error('LIBUSB_ERROR_TIMEOUT');
-      // Intentionally split even the two-byte HEX encoding of individual bytes.
+      // 各バイトを表す2バイトのHEX符号化の途中でも意図的に分割する。
       const chunk = queued.subarray(0, 3);
       queued = queued.subarray(chunk.length);
       return chunk;
@@ -55,7 +55,7 @@ function mockPrinter({ mode = true, paperError = 0, failAt = '', timeoutAt = '',
   return { io, writes, stages, settings };
 }
 
-test('SII decoder reconstructs 40 memory switches across all USB split boundaries', () => {
+test('SIIデコーダーはUSB応答の分割位置によらず40バイトのメモリースイッチを復元する', () => {
   const original = Buffer.from(Array.from({ length: 40 }, (_, i) => i * 6));
   const encoded = encodeHex(original);
   assert.equal(encoded.length, 82);
@@ -66,21 +66,21 @@ test('SII decoder reconstructs 40 memory switches across all USB split boundarie
   }
 });
 
-test('decoder separates status/completion from initialization and fragmented automatic status', () => {
+test('デコーダーは状態・完了応答を初期化通知や分割された自動ステータスと区別する', () => {
   const decoder = new SiiReplyDecoder();
   assert.deepEqual(decoder.push(Buffer.from([0xb2, 0xc0, 0xd1])), []);
   assert.deepEqual(decoder.push(Buffer.from([0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xa8, 0x89])),
     [{ kind: 'status', value: 8 }, { kind: 'execution', value: 9 }]);
 });
 
-test('decoder rejects corrupted or unbounded response frames', () => {
+test('デコーダーは破損した応答や長さの上限を超えるフレームを拒否する', () => {
   assert.throws(() => new SiiReplyDecoder().push(Buffer.from([14, 0xe0, 0])), /Malformed/);
   assert.throws(() => new SiiReplyDecoder().push(Buffer.from([14, 0xe0, 0xe1, 0])), /Malformed/);
   assert.throws(() => new SiiReplyDecoder().push(Buffer.from([0xc0, ...Array(7).fill(0xa0)])), /Malformed/);
   assert.throws(() => new SiiReplyDecoder().push(Buffer.alloc(4097, 14)), /too large/);
 });
 
-test('mark-status reads mode, sensor and error state without movement or configuration writes', async () => {
+test('mark-statusは紙送りや設定変更なしでモード・センサー・エラー状態を取得する', async () => {
   const p = mockPrinter();
   assert.deepEqual(await inspectBlackMark(p.io), {
     markMode: true, markDetected: true, paperEmpty: false, nearEnd: true,
@@ -91,7 +91,7 @@ test('mark-status reads mode, sensor and error state without movement or configu
   assert.ok(!p.writes.some(data => data[0] === 0x12 && data[1] === 0x77));
 });
 
-test('disabled mode and existing printer errors stop before paper movement', async () => {
+test('マークモードが無効または本体にエラーがある場合は紙送り前に停止する', async () => {
   for (const operation of [feedToMark, (io: PrinterIO) => printMarkedJob(io, compileMarkedReceipt('test'))]) {
     const p = mockPrinter({ mode: false });
     await assert.rejects(operation(p.io), /MS1-3/);
@@ -102,7 +102,7 @@ test('disabled mode and existing printer errors stop before paper movement', asy
   }
 });
 
-test('mark-feed waits for completion and verifies errors afterwards', async () => {
+test('mark-feedは完了応答を待ってからエラーを確認する', async () => {
   const p = mockPrinter();
   await feedToMark(p.io);
   assert.deepEqual(p.stages, [Buffer.from([0x1b, 0x40]), Buffer.from([0x1d, 0x3c])]);
@@ -111,7 +111,7 @@ test('mark-feed waits for completion and verifies errors afterwards', async () =
   assert.equal(q.stages.length, 2);
 });
 
-test('marked receipt separates initialization and disables default and in-document cuts', () => {
+test('マーク印刷では初期化を分離し、既定のカットと原稿内のカットを無効にする', () => {
   const job = compileMarkedReceipt('test\n=\n日本語');
   assert.ok(job.setup.subarray(0, 2).equals(Buffer.from([0x1b, 0x40])));
   assert.ok(!job.body.includes(Buffer.from([0x1b, 0x40])));
@@ -122,7 +122,7 @@ test('marked receipt separates initialization and disables default and in-docume
   assert.ok(markedJobBytes(job, true).subarray(-3).equals(Buffer.from([0x1d, 0x56, 1])));
 });
 
-test('printing checks initialization, alignment, body and end positioning separately; cut is opt-in', async () => {
+test('印刷は初期化・頭出し・本文・終端位置合わせを個別に確認し、指定時だけカットする', async () => {
   const job = compileMarkedReceipt('test');
   for (const cut of [false, true]) {
     const p = mockPrinter();
@@ -133,21 +133,21 @@ test('printing checks initialization, alignment, body and end positioning separa
   }
 });
 
-test('mark search errors prevent body printing and are never retried', async () => {
+test('マーク探索エラーでは本文を印字せず再試行もしない', async () => {
   const p = mockPrinter({ failAt: '1d3c' });
   await assert.rejects(printMarkedJob(p.io, compileMarkedReceipt('test'), true), /mark-search paper jam/);
   assert.equal(p.stages.length, 2);
   assert.deepEqual(p.stages[1], Buffer.from([0x1d, 0x3c]));
 });
 
-test('missing completion stops the job without later feed/cut commands or retransmission', async () => {
+test('完了応答がなければ後続の送り・カット・再送を行わず停止する', async () => {
   const job = compileMarkedReceipt('test');
   const p = mockPrinter({ timeoutAt: job.body.toString('hex') });
   await assert.rejects(printMarkedJob(p.io, job, true), /response failed/);
   assert.deepEqual(p.stages, [job.setup, Buffer.from([0x1d, 0x3c]), job.body]);
 });
 
-test('mark offsets round to dots, respect asymmetric limits and reject invalid values before I/O', async () => {
+test('マーク補正値をドット単位に丸め、正負で異なる範囲外の値は入出力前に拒否する', async () => {
   for (const [mm, direction, dots] of [[3, 0, 24], [-3, 1, 24], [0, 0, 0], [0.2, 0, 2],
     [-9.25, 1, 74], [31.875, 0, 255]]) {
     assert.deepEqual(markAlignmentBytes(mm), Buffer.from([0x1d, 0x50, 0, 203, 0x1d, 0x3c, 0x1d, 0x41, direction, dots]));
@@ -161,7 +161,7 @@ test('mark offsets round to dots, respect asymmetric limits and reject invalid v
   }
 });
 
-test('offset correction immediately follows alignment in live feed/print and exported jobs', async () => {
+test('実機の送り・印刷と書き出したデータで、頭出し直後に補正コマンドを配置する', async () => {
   const job = compileMarkedReceipt('test');
   for (const mm of [-3, 0, 3]) {
     const alignment = markAlignmentBytes(mm);
@@ -175,7 +175,7 @@ test('offset correction immediately follows alignment in live feed/print and exp
   }
 });
 
-test('corrected alignment errors and timeouts prevent subsequent printing and cutting', async () => {
+test('補正付き頭出しのエラーやタイムアウトでは後続の印字とカットを行わない', async () => {
   const alignment = markAlignmentBytes(3).toString('hex');
   for (const failure of [{ failAt: alignment }, { timeoutAt: alignment }]) {
     const p = mockPrinter(failure);
@@ -185,7 +185,7 @@ test('corrected alignment errors and timeouts prevent subsequent printing and cu
   }
 });
 
-test('paper width temporarily changes only MS4 layout bits and restores after operation completion', async () => {
+test('紙幅指定はMS4のレイアウト用ビットだけを一時変更し、処理完了後に復元する', async () => {
   for (const [ms4, width, expected] of [[0xff, 58, 0xe7], [0xa7, 80, 0xbf]]) {
     const p = mockPrinter({ ms4, asbAfterSettings: true });
     const original = Buffer.from(p.settings);
@@ -198,13 +198,13 @@ test('paper width temporarily changes only MS4 layout bits and restores after op
     assert.deepEqual(p.settings, original);
     assert.deepEqual(p.stages[0], Buffer.from([0x12, 0x77, 4, expected, 0]));
     assert.deepEqual(p.stages.at(-1), Buffer.from([0x12, 0x77, 4, ms4, 0]));
-    // A completion fence between body/end positioning and restore prevents premature initialization.
+    // 本文・終端位置合わせの完了を待ってから復元し、処理途中の初期化を防ぐ。
     const restoreIndex = p.writes.findLastIndex(data => data[0] === 0x12 && data[1] === 0x77);
     assert.deepEqual(p.writes[restoreIndex - 1], Buffer.from([0x12, 0x71, 15]));
   }
 });
 
-test('omitted/matching widths avoid configuration writes, invalid widths avoid all I/O', async () => {
+test('紙幅の省略・一致時は設定を書き込まず、不正な紙幅では入出力を行わない', async () => {
   for (const width of [undefined, 80]) {
     const p = mockPrinter();
     assert.equal(await withPaperWidth(p.io, width, async () => 'done'), 'done');
@@ -216,7 +216,7 @@ test('omitted/matching widths avoid configuration writes, invalid widths avoid a
   assert.equal(p.writes.length, 0);
 });
 
-test('failed setting verification prevents printing and restores original MS4', async () => {
+test('設定の検証に失敗したら印刷せず元のMS4を復元する', async () => {
   const p = mockPrinter();
   let changes = 0;
   const io: PrinterIO = { ...p.io, async write(data) {
@@ -229,7 +229,7 @@ test('failed setting verification prevents printing and restores original MS4', 
   assert.equal(changes, 2);
 });
 
-test('operation errors retain their cause and restore the original paper width', async () => {
+test('処理中のエラーは原因を保持し、元の紙幅を復元する', async () => {
   const p = mockPrinter();
   const failure = new Error('print failed');
   await assert.rejects(withPaperWidth(p.io, 58, async () => { throw failure; }), error => error === failure);
@@ -237,7 +237,7 @@ test('operation errors retain their cause and restore the original paper width',
   assert.equal(p.stages.length, 2);
 });
 
-test('failed USB writes stop further commands and report that restoration needs a power cycle', async () => {
+test('USB書き込み失敗後は送信を停止し、設定の復元には再起動が必要と案内する', async () => {
   const p = mockPrinter();
   const failure = new Error('USB disconnected');
   const io: PrinterIO = { ...p.io, async write(data) {
@@ -254,7 +254,7 @@ test('failed USB writes stop further commands and report that restoration needs 
   assert.equal(p.stages.length, 1);
 });
 
-test('failed restoration is reported instead of silently leaving the changed width', async () => {
+test('紙幅の復元に失敗した場合はエラーを報告する', async () => {
   const p = mockPrinter();
   let changes = 0;
   const io: PrinterIO = { ...p.io, async write(data) {

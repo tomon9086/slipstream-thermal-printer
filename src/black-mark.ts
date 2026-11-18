@@ -20,13 +20,13 @@ export function markCorrectionBytes(offsetMm: number): Buffer {
 
 export function markAlignmentBytes(offsetMm?: number): Buffer {
   if (offsetMm === undefined) return ALIGN;
-  // Pin the default 1/203-inch pitch: each unit resolves to one 0.125mm dot.
-  // GS A must immediately follow GS <, before any completion/status requests.
+  // 既定の1/203インチピッチに固定し、1単位を0.125mmの1ドットにする。
+  // GS AはGS <の直後に配置し、間に完了応答・状態取得の要求を挟まない。
   return Buffer.concat([Buffer.from([0x1d, 0x50, 0, 203]), ALIGN,
     markCorrectionBytes(offsetMm)]);
 }
 
-// SII technical reference 6-14: responses are a stream, not one USB packet each.
+// SII技術資料6-14：応答はストリームとして扱い、USBパケットとの一対一対応を前提にしない。
 export class SiiReplyDecoder {
   private pending: Buffer = Buffer.alloc(0);
 
@@ -53,7 +53,7 @@ export class SiiReplyDecoder {
         }
         this.pending = this.pending.subarray(end + 1);
       } else if ((first & 0xf0) === 0xc0) {
-        // Automatic status is an eight-byte record; do not mistake it for a reply.
+        // 自動ステータスは8バイトのレコードで、要求への応答と取り違えない。
         if (this.pending.length < 8) break;
         if (!this.pending.subarray(1, 8).every(byte => (byte & 0xf0) === 0xd0)) {
           throw new Error('Malformed SII automatic status response');
@@ -62,7 +62,7 @@ export class SiiReplyDecoder {
       } else {
         if ((first & 0xf0) === 0xa0) replies.push({ kind: 'status', value: first & 15 });
         if ((first & 0xf0) === 0x80) replies.push({ kind: 'execution', value: first & 15 });
-        // Ignore initialization, progress, and serial flow-control bytes.
+        // 初期化・進行状況の通知とシリアルフロー制御のバイトを無視する。
         this.pending = this.pending.subarray(1);
       }
     }
@@ -99,7 +99,7 @@ export class SiiClient {
   }
 
   async synchronize() {
-    // A fence after older queued commands drains their replies, including ReceiptLine's 0x80.
+    // 蓄積されたコマンドの後ろに同期用コマンドを送り、ReceiptLineの0x80を含む古い応答を読み切る。
     await this.io.write(completion(15));
     await this.wait('execution', 15);
   }
@@ -128,7 +128,7 @@ export class SiiClient {
   }
 }
 
-// Nested operations must share response fragments and completion tags on one USB stream.
+// 入れ子の処理でも同じUSBストリームの応答断片と完了タグを共有する。
 const clients = new WeakMap<PrinterIO, SiiClient>();
 function clientFor(io: PrinterIO): SiiClient {
   let client = clients.get(io);
@@ -165,7 +165,7 @@ export async function feedToMark(io: PrinterIO, offsetMm?: number) {
   await client.assertReady();
 }
 
-// For dry-run/export only. Actual printing fences and checks each stage separately.
+// ドライラン・書き出し専用。実機印刷では各段階の完了と状態を個別に確認する。
 export function markedJobBytes(job: MarkedJob, cut = false, offsetMm?: number): Buffer {
   return Buffer.concat([job.setup, markAlignmentBytes(offsetMm), job.body, FORM_FEED, ...(cut ? [CUT] : [])]);
 }
@@ -189,7 +189,7 @@ export async function printMarkedJob(io: PrinterIO, job: MarkedJob, cut = false,
   }
 }
 
-// Explicit paper-width options change only volatile MS4, then restore its original byte.
+// 紙幅を明示した場合だけRAM上のMS4を変更し、終了時に元の1バイトを復元する。
 export async function withPaperWidth<T>(io: PrinterIO, width: number | undefined,
   operation: (io: PrinterIO) => Promise<T>): Promise<T> {
   if (width === undefined) return operation(io);
@@ -202,7 +202,7 @@ export async function withPaperWidth<T>(io: PrinterIO, width: number | undefined
   const client = clientFor(session);
   await client.synchronize();
   const original = await client.settings();
-  // MS4-4: paper width, MS4-5: effective dots. Match our 360/576-dot layouts.
+  // MS4-4は紙幅、MS4-5は有効ドット数。360/576ドットのレイアウトに合わせる。
   const ms4 = (original[3] & ~0x18) | (width === 80 ? 0x18 : 0);
   if (ms4 === original[3]) return operation(session);
   const setting = (value: number) => Buffer.from([0x12, 0x77, 4, value, 0]);
@@ -211,7 +211,7 @@ export async function withPaperWidth<T>(io: PrinterIO, width: number | undefined
     await client.execute(setting(ms4));
     if ((await client.settings())[3] !== ms4) throw new Error('Paper-width setting verification failed');
     const result = await operation(session);
-    await client.synchronize(); // Printing must finish before initialization during restore.
+    await client.synchronize(); // 復元時の初期化より先に印刷を完了させる。
     return result;
   } catch (error) {
     failure = error;

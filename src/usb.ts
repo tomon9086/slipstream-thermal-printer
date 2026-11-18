@@ -1,4 +1,4 @@
-// USB transport for the observed RP-E11. Never detach a driver or retry a send.
+// 実機確認したRP-E11用のUSB転送。ドライバーの切り離しや送信の再試行は行わない。
 export type UsbError = Error & { code?: string; errno?: number };
 export interface PrinterOutEndpoint {
   direction: 'out';
@@ -52,7 +52,7 @@ export async function sendToPrinter(payload: Buffer | null, options: SendOptions
   }, options);
 }
 
-// Keeps a single claimed interface open for a sequence of requests and responses.
+// 一連の要求と応答で、一度確保したインターフェースを開いたまま使う。
 export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
   statusOnly = false,
   ignorePaperStatus = false,
@@ -77,7 +77,7 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
     const status = await new Promise<unknown>((resolve, reject) => {
       device.controlTransfer(0xa1, 1, 0, 0, 1, (error, data) => {
         if (error) {
-          // GET_PORT_STATUS may be unsupported. Only a stalled request is optional.
+          // GET_PORT_STATUSは非対応の場合がある。STALLの場合だけ状態取得を省略できる。
           if (error.code === 'LIBUSB_ERROR_PIPE' || error.errno === -9) resolve(null);
           else reject(error);
         } else resolve(data);
@@ -104,8 +104,8 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
         const endpoint = claimedInterface.endpoint(0x01);
         if (!isOutEndpoint(endpoint)) throw new Error('Bulk OUT 0x01 missing');
         endpoint.timeout = 15000;
-        // Bound transfers below the observed 16KiB receive buffer. No retries, including
-        // after a short transfer: some bytes may already have printed.
+        // 実機の16KiB受信バッファより小さく分割して転送する。一部が印字済みの可能性があるため、
+        // 部分転送の場合も再試行しない。
         let accepted = 0;
         for (let offset = 0; offset < payload.length; offset += 4096) {
           const chunk = payload.subarray(offset, offset + 4096);
@@ -134,7 +134,7 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
         while (remaining > 0) {
           endpoint.timeout = remaining;
           const data = await new Promise<Buffer>((resolve, reject) => {
-            // One maximum packet, so an exact 64-byte reply fragment can complete.
+            // 最大パケット1個分を要求し、ちょうど64バイトの応答断片でも受信が完了するようにする。
             endpoint.transfer(64, (error, data) => {
               if (error) reject(error);
               else if (!Buffer.isBuffer(data)) reject(new Error('Invalid USB response'));
@@ -142,8 +142,8 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
             });
           });
           if (data.length) return data;
-          // RP-E11 sends zero-length packets while a command is pending. Keep
-          // receiving the same response within its original deadline; never resend.
+          // RP-E11はコマンドの処理中に長さゼロのパケットを送る。元の期限内で同じ応答の
+          // 受信を続け、コマンドは再送しない。
           remaining = deadline - Date.now();
         }
         throw new Error('Timed out waiting for USB response data');
@@ -158,7 +158,7 @@ export async function withPrinter<T>(operation: (io: PrinterIO) => Promise<T>, {
     }
     throw error;
   } finally {
-    // Always close even if release fails, retaining the original transfer failure.
+    // 解放に失敗しても必ず閉じ、元の転送エラーを保持する。
     let cleanupError: unknown;
     if (claimed && iface) {
       const claimedInterface = iface;
