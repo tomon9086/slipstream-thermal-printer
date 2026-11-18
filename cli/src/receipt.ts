@@ -3,9 +3,10 @@ import sharp from 'sharp';
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { paperLayout } from './paper.ts';
+import type { MarkedJob } from './black-mark.ts';
 
-// 原稿内の画像参照を展開し、PNG画像を選択した印字幅に収める。
-// 参照パスは実行時の作業ディレクトリではなく、原稿ファイルを基準に解決する。
+// ローカル画像の参照を展開し、単独のPNG画像を用紙のレイアウトに収める。
+// パスは原稿からの相対パスとし、呼び出し元の作業ディレクトリに依存させない。
 export async function loadReceipt(file: string, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<string> {
   paperLayout(paperWidth);
   const document = await readFile(file, 'utf8');
@@ -33,7 +34,7 @@ export function compileReceipt(document: string, options: ReceiptOptions & { svg
 export function compileReceipt(document: string, { paperWidth = 58, svg = false }: ReceiptOptions = {}): Buffer | string {
   const options = printerOptions(paperWidth);
   if (svg) return receiptline.transform(document, { ...options, command: 'svg' });
-  // ReceiptLineの出力はバイナリー文字列。UTF-8変換によるコマンド・画像の破損を防ぐ。
+  // ReceiptLineはバイナリー文字列を返す。UTF-8にするとコマンドや画像のバイト列が壊れる。
   return Buffer.from(receiptline.transform(document, options), 'latin1');
 }
 
@@ -50,4 +51,27 @@ export async function compileImage(path: string | Buffer, { paperWidth = 58 }: {
   const document = `{image:${data.toString('base64')}}`;
   const options = { ...printerOptions(paperWidth), gradient: true };
   return Buffer.from(receiptline.transform(document, options), 'latin1');
+}
+
+export function compileMarkedReceipt(document: string, { paperWidth = 58 }: { paperWidth?: number } = {}): MarkedJob {
+  const base = receiptline.commands.sii;
+  let setup: Buffer = Buffer.alloc(0);
+  const command: receiptline.BaseCommand = {
+    ...base,
+    open(printer) {
+      setup = Buffer.from(base.open.call(this, printer), 'latin1');
+      return '';
+    },
+    close() { return ''; },
+    // 原稿内の「=」によるカット指定も無効にする。
+    cut() { return ''; },
+  };
+  const body = Buffer.from(receiptline.transform(document,
+    { ...printerOptions(paperWidth), cutting: false, command }), 'latin1');
+  return { setup, body };
+}
+
+export async function compileMarkedImage(path: string | Buffer, { paperWidth = 58 }: { paperWidth?: number } = {}): Promise<MarkedJob> {
+  const data = await prepareImage(path, paperWidth);
+  return compileMarkedReceipt(`{image:${data.toString('base64')}}`, { paperWidth });
 }

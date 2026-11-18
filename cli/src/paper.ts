@@ -1,4 +1,4 @@
-// 本体のメモリスイッチは変更せず、確認済みの58mm設定を含む印字レイアウトを選ぶ。
+// レイアウトのプリセット。本体のメモリースイッチ設定とは別で、検証済みの58mmレイアウトを維持する。
 export function paperLayout(paperWidth = 58) {
   switch (paperWidth) {
     case 58: return { dots: 360, cpl: 30 };
