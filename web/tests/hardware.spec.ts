@@ -1,11 +1,19 @@
 import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 
+test.use({ viewport: { width: 1200, height: 1040 } });
+
 test('実機にWebUSBから日本語・QR見本を1回送信する', async ({ page, context }, testInfo) => {
   test.skip(process.env.RUN_USB_PRINT !== '1', '実印刷はpnpm test:usbで明示的に実行');
   const manifest = JSON.parse(await readFile(new URL('../public/fixtures/manifest.json', import.meta.url), 'utf8'));
+  const capture = async (name: string) => {
+    if (process.env.CAPTURE_USB_SCREENSHOTS !== '1') return;
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: testInfo.outputPath(`${name}.png`), fullPage: true });
+  };
   try {
     await page.goto('/');
+    await capture('01-before-connect');
     const countGranted = await page.evaluate(async () => {
       if (!navigator.usb) return 0;
       return (await navigator.usb.getDevices())
@@ -18,11 +26,13 @@ test('実機にWebUSBから日本語・QR見本を1回送信する', async ({ pa
     await expect(page.getByTestId('state')).toHaveText('status-read');
     // この個体は用紙が入っていても0x38を返す（CONNECTION.mdを参照）。
     await page.getByRole('checkbox').check();
+    await capture('02-ready-to-print');
     await page.getByRole('button', { name: '1回印刷する' }).click();
     await expect(page.getByTestId('state')).toHaveText('sent', { timeout: 15_000 });
     await expect(page.getByTestId('log')).toContainText(manifest['japanese-qr'].sha256);
     const count = manifest['japanese-qr'].bytes;
     await expect(page.getByTestId('log')).toContainText(`USB accepted ${count}/${count} bytes`);
+    await capture('03-print-sent');
     await page.getByRole('button', { name: '切断', exact: true }).click();
     await expect(page.getByTestId('state')).toHaveText('disconnected');
   } finally {

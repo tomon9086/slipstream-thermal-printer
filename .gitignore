@@ -5,3 +5,4 @@ __pycache__/
 test-results/
 playwright-report/
 *.tsbuildinfo
+web/next-env.d.ts

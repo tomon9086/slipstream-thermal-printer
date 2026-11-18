@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { closePrinter, connectPrinter, readStatus, sendBytes } from '../lib/printer';
+import type { PrinterSession } from '../lib/printer';
 
 export default function Page() {
-  const printer = useRef<USBDevice | null>(null);
+  const printer = useRef<PrinterSession | null>(null);
   const running = useRef(false);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -12,11 +13,12 @@ export default function Page() {
   const [fixture, setFixture] = useState('japanese-qr');
   const [state, setState] = useState('idle');
   const [logs, setLogs] = useState<string[]>([]);
+  const [errorMessage, setErrorMessage] = useState('');
   const log = (text: string) => setLogs(old => [...old, `${new Date().toISOString()} ${text}`]);
 
   useEffect(() => {
     const disconnected = (event: USBConnectionEvent) => {
-      if (event.device === printer.current) {
+      if (event.device === printer.current?.device) {
         printer.current = null;
         setConnected(false);
         setState('disconnected');
@@ -34,13 +36,17 @@ export default function Page() {
     if (running.current) return;
     running.current = true;
     setBusy(true);
+    setErrorMessage('');
     try { await action(); }
     catch (error) {
       setState('error');
-      log(`ERROR: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      setErrorMessage(message);
+      log(`ERROR: ${message}`);
       const device = printer.current;
       printer.current = null;
       setConnected(false);
+      setIgnorePaper(false);
       if (device) await closePrinter(device).catch(e => log(`Close: ${String(e)}`));
     } finally {
       running.current = false;
@@ -99,6 +105,7 @@ export default function Page() {
     <section>
       <h2>通信ログ</h2>
       <p role="status" data-testid="state">{state}</p>
+      {errorMessage && <p role="alert" data-testid="error">{errorMessage}</p>}
       <pre data-testid="log" aria-live="polite">{logs.join('\n') || '操作待ち'}</pre>
       <button onClick={() => {
         const url = URL.createObjectURL(new Blob([logs.join('\n')], { type: 'text/plain' }));

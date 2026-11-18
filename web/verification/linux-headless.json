@@ -1,7 +1,6 @@
 {
   "browser": "159.0.8154.6",
   "platform": "linux",
-  "chooserErrors": [],
-  "log": "2026-11-17T23:09:56.224Z Connected: SII RP-E10 Series. (0619:0123), interface 0\n2026-11-17T23:09:56.268Z GET_PORT_STATUS: 0x38\n2026-11-17T23:09:56.391Z Payload: japanese-qr, 527 bytes, SHA-256 d9772f6f102cd6b2f7f29156ad36f9995fd308d5c19c7a0760fef74bdc4f3403\n2026-11-17T23:09:56.394Z GET_PORT_STATUS: 0x38\n2026-11-17T23:09:56.395Z USB accepted 527/527 bytes\n2026-11-17T23:09:56.395Z 送信完了。紙の印字とQRの読み取りを確認してください。\n2026-11-17T23:09:56.452Z USB closed",
+  "log": "2026-11-18T09:48:07.674Z Connected: SII RP-E10 Series. (0619:0123), interface 0\n2026-11-18T09:48:07.736Z GET_PORT_STATUS: 0x18\n2026-11-18T09:48:07.904Z Payload: japanese-qr, 527 bytes, SHA-256 d9772f6f102cd6b2f7f29156ad36f9995fd308d5c19c7a0760fef74bdc4f3403\n2026-11-18T09:48:07.906Z GET_PORT_STATUS: 0x18\n2026-11-18T09:48:07.907Z USB accepted 527/527 bytes\n2026-11-18T09:48:07.907Z 送信完了。紙の印字とQRの読み取りを確認してください。\n2026-11-18T09:48:08.038Z USB closed",
   "physicalPrintVerified": false
 }
