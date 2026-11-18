@@ -1,0 +1,22 @@
+{
+  "name": "slipstream-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "print": "node index.ts",
+    "web:fixtures": "node scripts/generate-web-fixtures.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.7.3",
+    "receiptline": "^4.0.4",
+    "sharp": "^0.35.5",
+    "usb": "^2.19.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

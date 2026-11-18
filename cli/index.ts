@@ -6,7 +6,7 @@ import { makeSamples } from './src/samples.ts';
 import { sendToPrinter } from './src/usb.ts';
 import { paperLayout } from './src/paper.ts';
 
-const help = `Usage: node cli.ts <command> [file] [options]
+const help = `Usage: pnpm run print <command> [file] [options] (from repository root)
 Commands:
   status                 Read USB status without printing
   samples                Print font, Japanese, and native QR samples

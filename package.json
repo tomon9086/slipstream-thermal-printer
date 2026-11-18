@@ -7,19 +7,10 @@
     "node": ">=26 <27"
   },
   "scripts": {
-    "print": "node cli.ts",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.ts"
+    "web:fixtures": "pnpm --filter slipstream-cli web:fixtures",
+    "print": "node cli/index.ts",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
   },
-  "dependencies": {
-    "iconv-lite": "^0.7.3",
-    "receiptline": "^4.0.4",
-    "sharp": "^0.35.5",
-    "usb": "^2.19.1"
-  },
-  "packageManager": "pnpm@12.21.0",
-  "devDependencies": {
-    "@types/node": "^26.6.6",
-    "typescript": "^7.0.2"
-  }
+  "packageManager": "pnpm@12.21.0"
 }

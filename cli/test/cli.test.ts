@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 function cli(...args: string[]) {
-  return spawnSync(process.execPath, ['cli.ts', ...args], { cwd: root, encoding: 'utf8' });
+  return spawnSync(process.execPath, ['cli/index.ts', ...args], { cwd: root, encoding: 'utf8' });
 }
 
 test('CLI accepts both paper widths and uses them in saved previews without USB access', async t => {

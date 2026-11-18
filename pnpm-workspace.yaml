@@ -1,3 +1,6 @@
 engineStrict: true
+packages:
+  - cli
+  - web
 allowBuilds:
   usb: true
