@@ -61,7 +61,11 @@
   "completed": true,
   "settingsRestored": true,
   "settingsReadbackBytes": 40,
-  "physicalPrintVerified": false,
+  "physicalPrintVerified": true,
+  "physicalPrintVerification": {
+    "source": "user-confirmation",
+    "result": "2枚とも宛名が印字され、それぞれカットされている"
+  },
   "blackMarkAlignmentVerified": false,
   "temporaryPolicyRemoved": true,
   "deviceOwnerRestored": true

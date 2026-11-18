@@ -159,7 +159,8 @@ QR読み取り・マーク紙の位置精度は未確認です。
 一時的なブラウザ管理ポリシー・USBノードの所有者は元に戻しています。
 記録は [verification/editor-two-labels.json](verification/editor-two-labels.json)、
 印刷用画像は [verification/screenshots/editor-two-labels.png](verification/screenshots/editor-two-labels.png) にあります。
-この2枚の実紙の確認は利用者待ちです。通常ロールのため、マークに対するカット位置・区画を飛ばさない再開は検証していません。
+利用者が、実紙2枚とも宛名が印字され、それぞれカットされていることを確認しました。
+通常ロールのため、マークに対するカット位置・区画を飛ばさない再開は検証していません。
 
 ## Windowsの準備
 
