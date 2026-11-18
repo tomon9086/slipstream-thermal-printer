@@ -130,7 +130,9 @@ pwsh -NoProfile -File .\winusb\tests\Run-Tests.ps1
 
 WindowsのPnpDevice・レジストリ・管理者判定・インストーラーをテスト内で置き換えて分岐を検証します。
 外部プロセスの失敗終了も、小さなPowerShell子プロセスで確認します。
-CIはLinuxのPowerShellとWindowsのPowerShell 7／Windows PowerShell 5.1で実行します。
+初回はLinuxのPowerShellとWindowsのPowerShell 7／Windows PowerShell 5.1で、19件のテストに成功しました
+（[確認時の実行結果](https://github.com/tomon9086/slipstream-thermal-printer/actions/runs/44319894070)）。
+継続的なCIは設置せず、変更時は上のコマンドで必要に応じて確認します。
 **Windows実機でのドライバー変更、libwdiのビルド、RP-E11へのWebUSB通信は未検証です。**
 
 参考:

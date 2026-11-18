@@ -212,5 +212,5 @@ $module = Import-Module (Join-Path $PSScriptRoot '../WinUsb.psm1') -Force -PassT
     Write-Host "$script:passed 件のテストに成功しました。"
 }
 
-# 失敗終了の検証で残った子プロセスの終了コードをCIへ伝播させない。
+# 失敗終了の検証で残った子プロセスの終了コードを呼び出し元へ伝播させない。
 exit 0
