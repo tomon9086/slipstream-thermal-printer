@@ -8,7 +8,6 @@
   },
   "scripts": {
     "print": "node cli.ts",
-    "mark-trace": "node examples/mark-trace.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts"
   },

@@ -10,20 +10,16 @@ const FORM_FEED = Buffer.from([0x1d, 0x0c]);
 const CUT = Buffer.from([0x1d, 0x56, 1]);
 const completion = (tag: number) => Buffer.from([0x12, 0x71, tag]);
 
-export function markCorrectionBytes(offsetMm: number): Buffer {
+export function markAlignmentBytes(offsetMm?: number): Buffer {
+  if (offsetMm === undefined) return ALIGN;
   if (!Number.isFinite(offsetMm) || offsetMm < -9.25 || offsetMm > 31.875) {
     throw new Error('--mark-offset must be between -9.25 and 31.875 (mm)');
   }
   const dots = Math.round(Math.abs(offsetMm) * 8);
-  return Buffer.from([0x1d, 0x41, offsetMm < 0 ? 1 : 0, dots]);
-}
-
-export function markAlignmentBytes(offsetMm?: number): Buffer {
-  if (offsetMm === undefined) return ALIGN;
   // 既定の1/203インチピッチに固定し、1単位を0.125mmの1ドットにする。
   // GS AはGS <の直後に配置し、間に完了応答・状態取得の要求を挟まない。
   return Buffer.concat([Buffer.from([0x1d, 0x50, 0, 203]), ALIGN,
-    markCorrectionBytes(offsetMm)]);
+    Buffer.from([0x1d, 0x41, offsetMm < 0 ? 1 : 0, dots])]);
 }
 
 // SII技術資料6-14：応答はストリームとして扱い、USBパケットとの一対一対応を前提にしない。
@@ -70,7 +66,7 @@ export class SiiReplyDecoder {
   }
 }
 
-export class SiiClient {
+class SiiClient {
   private decoder = new SiiReplyDecoder();
   private replies: Reply[] = [];
   private tag = 0;
