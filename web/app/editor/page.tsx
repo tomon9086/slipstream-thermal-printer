@@ -129,7 +129,7 @@ export default function EditorPage() {
             {marginFields.map(([key, side]) => <label key={key}>{side}余白（mm）<input type="number" min={0} max={20} step={0.125}
               value={Number.isFinite(draft[key]) ? draft[key] : ''} onChange={event => edit(key, event.target.valueAsNumber)} /></label>)}
           </div>
-          <p className={styles.hint}>上下左右を個別に設定できます。0.125mm（1ドット）刻み。</p>
+          <p className={styles.hint}>画像内の余白です。0.125mm（1ドット）刻み。本体の印刷できない余白（58mmロールでは左右各約2mm）が別に付きます。</p>
           <label>文字の描き方<select value={draft.textRenderer} onChange={event => edit('textRenderer', event.target.value as LabelDraft['textRenderer'])}>
             <option value="outline">通常フォント（Noto Sans JP）</option><option value="bitmap">ドットフォント（Unifont JP）</option>
           </select></label>
@@ -218,8 +218,11 @@ export default function EditorPage() {
             <label className={styles.toggle}><input type="checkbox" checked={cut} onChange={event => setCut(event.target.checked)} />1枚ごとにカットする</label>
             {marked && <>
               <p className={styles.hint}>{position === 'after-cut' ? '前回のカット位置から再開します。開始時の空送りはしません。' : '最初に黒帯へ位置を合わせます。未使用区画を送る場合があります。'}</p>
-              <button className={styles.textButton} type="button" onClick={() => { setPosition('unknown'); setNotice('次回印刷時に頭出しします。'); }}>紙を交換・手動で動かした</button>
             </>}
+            {!marked && <p className={styles.hint}>{position === 'after-cut'
+              ? '前回のカット位置から9.25mm戻し、上余白を減らして再開します。'
+              : '位置が不明な最初の1枚には、画像の上余白に加えて約12mmの余白が付きます。カット後の次の紙は9.25mm戻して余白を減らします。'}</p>}
+            <button className={styles.textButton} type="button" onClick={() => { setPosition('unknown'); setNotice(marked ? '次回印刷時に頭出しします。' : '用紙位置を不明に戻しました。次回の最初の1枚は逆送りしません。'); }}>紙を交換・手動で動かした</button>
             <details className={styles.advanced}><summary>印刷の詳細設定</summary>
               {marked && <label>カット位置の補正（mm）<input type="number" min={-5} max={5} step={0.125} value={cutAdjust}
                 onChange={event => { setCutAdjust(Number(event.target.value)); setPosition('unknown'); }} /></label>}

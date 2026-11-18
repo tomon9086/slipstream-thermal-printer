@@ -1,5 +1,5 @@
 import { readStatus, writeBytes, type PrinterSession } from './printer';
-import { rasterBytes, type RasterLabel } from './label';
+import { labelWidth, rasterBytes, type RasterLabel } from './label';
 
 type Reply = { kind: 'hex'; data: Uint8Array } | { kind: 'status' | 'execution'; value: number };
 type Position = 'unknown' | 'after-cut';
@@ -114,7 +114,7 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
   const startedAt = Date.now();
   const invalid = printOptionError(raster.height, options);
   if (invalid) throw new Error(invalid);
-  if (raster.width !== (options.paperWidth === 58 ? 360 : 576)) throw new Error('画像の幅と用紙設定が一致しません。画像を生成し直してください。');
+  if (raster.width !== labelWidth(options.paperWidth)) throw new Error('画像の幅と用紙設定が一致しません。画像を生成し直してください。');
   const image = rasterBytes(raster);
   const usbStatus = await readStatus(session, log);
   if (usbStatus !== null && (!(usbStatus & 8) || ((usbStatus & 32) && !options.ignorePaper))) throw new Error('プリンターまたは用紙の状態を確認してください。');
@@ -134,11 +134,16 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
     await pause(20);
   };
   const returnFromCut = async () => {
-    await feed(8);
-    await sii.execute([0x1b, 0x6a, cutFeed + 8 - 44]);
+    if (options.marked) {
+      await feed(8);
+      await sii.execute([0x1b, 0x6a, cutFeed + 8 - 44]);
+    } else {
+      // カット済みの紙だけを仕様上限9.25mm戻し、ヘッド〜カッター間の上余白を減らす。
+      await sii.execute([0x1b, 0x6a, 74]);
+    }
     await pause(20);
     await sii.ready();
-    log('カット位置から戻して再開（開始時のマーク探索なし）');
+    log(options.marked ? 'カット位置から戻して再開（開始時のマーク探索なし）' : 'カット位置から9.25mm戻して通常ロールの上余白を削減');
   };
   const rowBytes = raster.width / 8;
   const probe = new Uint8Array(8 + rowBytes * 7 + 3);
@@ -161,19 +166,17 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
   };
   try {
     const expected = original.slice();
-    for (const [index, value] of [[4, (original[3] & ~24) | (options.paperWidth === 80 ? 24 : 0)],
+    for (const [index, value] of [[4, (original[3] & ~24) | (options.paperWidth === 80 ? 24 : 16)],
       [1, options.marked ? original[0] | 4 : original[0] & ~4]]) {
       changed.push(index);
       await sii.execute([0x12, 0x77, index, value, 0]); expected[index - 1] = value;
     }
     if (!(await sii.settings()).every((value, index) => value === expected[index])) throw new Error('用紙設定の確認に失敗しました。');
     await sii.execute([0x1d, 0x50, 0, 203, 0x1d, 0x4c, 0, 0, 0x1d, 0x57, raster.width & 255, raster.width >> 8, 0x1b, 0x61, 0]);
-    if (options.marked) {
-      if (options.position === 'after-cut') await returnFromCut();
-      else { await seek(); await feed(44); }
-    }
+    if (options.position === 'after-cut') await returnFromCut();
+    else if (options.marked) { await seek(); await feed(44); }
     for (let number = 1; number <= options.copies; number++) {
-      if (number > 1 && options.marked) await returnFromCut();
+      if (number > 1 && options.cut) await returnFromCut();
       await sii.ready();
       await sii.execute(image);
       if (options.marked) {
@@ -187,7 +190,7 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
         if (wait) await pause(wait);
         await sii.ready();
         await sii.execute([0x1d, 0x56, 1]); lastCutByDevice.set(session.device, Date.now());
-        position = options.marked ? 'after-cut' : 'unknown';
+        position = 'after-cut';
       }
       await sii.ready();
       log(`${number}/${options.copies}枚：印字${options.cut ? '・カット' : ''}の完了応答を確認`);

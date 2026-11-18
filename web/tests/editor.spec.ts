@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-type UsbState = { events: { type: string; dots?: number; height?: number; width?: number; at?: number }[]; settings: number[]; transfers: number; closes: number; replyBlocked: boolean };
+type UsbState = { events: { type: string; dots?: number; height?: number; width?: number; at?: number }[]; settings: number[]; settingWrites: { index: number; value: number }[]; transfers: number; closes: number; replyBlocked: boolean };
 const usbState = (page: Page) => page.evaluate(() => (window as unknown as { editorUsb: UsbState }).editorUsb);
 
 async function readyPreview(page: Page) {
@@ -14,7 +14,7 @@ async function observeRasterWork(page: Page) {
     Object.assign(window, { rasterWork: state });
     const encode = HTMLCanvasElement.prototype.toDataURL;
     HTMLCanvasElement.prototype.toDataURL = function (...args) {
-      if (args[0] === 'image/png' && this.width === 360 && this.height === 304) state.encodings++;
+      if (args[0] === 'image/png' && this.width === 432 && this.height === 304) state.encodings++;
       return encode.apply(this, args);
     };
     const decode = HTMLImageElement.prototype.decode;
@@ -40,7 +40,7 @@ type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'reply-timeout-
 
 async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
   await page.addInitScript(failure => {
-    const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), transfers: 0, closes: 0, replyBlocked: false };
+    const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), settingWrites: [] as { index: number; value: number }[], transfers: 0, closes: 0, replyBlocked: false };
     state.settings[0] = 251;
     Object.assign(window, { editorUsb: state });
     let bytes: number[] = [], queued: number[] = [], paperDots = 0;
@@ -57,6 +57,7 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
             0xc0, ...Array(7).fill(0xd0));
         } else if (bytes[0] === 0x12 && bytes[1] === 0x77) {
           length = 5; if (bytes.length < length) return;
+          state.settingWrites.push({ index: bytes[2], value: bytes[3] });
           state.settings[bytes[2] - 1] = bytes[3];
         } else if (bytes[0] === 0x1d && bytes[1] === 0x72) {
           length = 3; if (bytes.length < length) return;
@@ -142,10 +143,10 @@ test('操作ボタンなしで編集内容を白黒プレビューへ反映し�
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     return { width: canvas.width, height: canvas.height, binary: pixels.every((value, index) => index % 4 === 3 ? value === 255 : value === 0 || value === 255), black: pixels.some((value, index) => index % 4 === 0 && value === 0) };
   });
-  expect(output).toEqual({ width: 360, height: 304, binary: true, black: true });
+  expect(output).toEqual({ width: 432, height: 304, binary: true, black: true });
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: 'PNGを保存' }).click();
-  expect((await downloaded).suggestedFilename()).toBe('label-360x304.png');
+  expect((await downloaded).suggestedFilename()).toBe('label-432x304.png');
   await page.getByLabel('郵便番号', { exact: true }).fill('〒000-0000');
   await expect(page.getByTestId('raster-preview-panel')).toHaveAttribute('data-preview-state', 'pending');
   await expect(page.getByRole('button', { name: 'PNGを保存' })).toBeDisabled();
@@ -253,7 +254,7 @@ test.describe('スマホのラスタライズ', () => {
         });
       });
       for (const part of textPixels) expect(part.black, `${mode}：${part.part}に文字の黒画素がある`).toBeGreaterThan(100);
-      await expect(page.getByTestId('raster-preview')).toHaveAttribute('width', '360');
+      await expect(page.getByTestId('raster-preview')).toHaveAttribute('width', '432');
     }
   });
 
@@ -293,7 +294,7 @@ test('連続入力をまとめて画像化し、表示倍率の変更では画�
   await expect(image).not.toHaveAttribute('src', previous!);
   const current = await image.getAttribute('src');
   await page.getByRole('combobox', { name: '表示倍率', exact: true }).selectOption('2');
-  await expect(image).toHaveCSS('width', '720px');
+  await expect(image).toHaveCSS('width', '864px');
   await expect(image).toHaveAttribute('src', current!);
   expect((await rasterWork(page)).encodings).toBe(before + 1);
 });
@@ -423,9 +424,54 @@ test('通常ロールの画像印字とカットの完了を確認し、本体�
   await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
   await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
   const state = await usbState(page);
-  expect(state.events.filter(event => event.type === 'raster')).toEqual([{ type: 'raster', width: 360, height: 304 }]);
+  expect(state.events.filter(event => event.type === 'raster')).toEqual([{ type: 'raster', width: 432, height: 304 }]);
   expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+  expect(state.settingWrites).toContainEqual({ index: 4, value: 0xf7 });
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('通常ロールはカット済みの次の紙だけ74ドット戻し、紙を動かした後は戻さない', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('roll');
+  await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('2');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを2枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('2枚の印字・カットの完了応答を確認');
+  const first = await usbState(page);
+  expect(first.events.map(event => event.type)).toEqual(['raster', 'feed', 'cut', 'back', 'raster', 'feed', 'cut']);
+  expect(first.events.filter(event => event.type === 'back')).toEqual([{ type: 'back', dots: 74 }]);
+
+  await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('1');
+  const print = page.getByRole('button', { name: 'このラベルを1枚印刷する' });
+  await print.click();
+  await expect.poll(async () => (await usbState(page)).events.filter(event => event.type === 'cut').length).toBe(3);
+  await expect(print).toBeEnabled();
+  const second = await usbState(page);
+  expect(second.events.slice(first.events.length, first.events.length + 2)).toEqual([
+    { type: 'back', dots: 74 }, { type: 'raster', width: 432, height: 304 },
+  ]);
+
+  await page.getByRole('button', { name: '紙を交換・手動で動かした', exact: true }).click();
+  await print.click();
+  await expect.poll(async () => (await usbState(page)).events.filter(event => event.type === 'cut').length).toBe(4);
+  await expect(print).toBeEnabled();
+  const final = await usbState(page);
+  expect(final.events.slice(second.events.length).map(event => event.type)).toEqual(['raster', 'feed', 'cut']);
+  expect(final.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('通常ロールでもカットしない連続印刷は逆送りしない', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('roll');
+  await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('2');
+  await page.getByRole('checkbox', { name: '1枚ごとにカットする', exact: true }).uncheck();
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを2枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('2枚の印字の完了応答を確認');
+  const state = await usbState(page);
+  expect(state.events.map(event => event.type)).toEqual(['raster', 'feed', 'raster', 'feed']);
 });
 
 test('マーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
@@ -442,7 +488,7 @@ test('マーク紙を印字し、次のジョブは同じ接続のカット位�
   await expect(print).toBeEnabled();
   const second = await usbState(page);
   const nextEvents = second.events.slice(first.events.length);
-  expect(nextEvents.slice(0, 3)).toEqual([{ type: 'feed', dots: 8 }, { type: 'back', dots: 69 }, { type: 'raster', width: 360, height: 304 }]);
+  expect(nextEvents.slice(0, 3)).toEqual([{ type: 'feed', dots: 8 }, { type: 'back', dots: 69 }, { type: 'raster', width: 432, height: 304 }]);
   const cuts = second.events.filter(event => event.type === 'cut');
   expect(cuts[1].at! - cuts[0].at!).toBeGreaterThanOrEqual(2000);
   expect(second.settings).toEqual([251, ...Array(39).fill(255)]);
@@ -463,7 +509,7 @@ test('2枚の印字とカットを交互に実行し、間の用紙を飛ばさ�
   expect(cuts[1].at! - cuts[0].at!).toBeGreaterThanOrEqual(2000);
   const firstCut = state.events.findIndex(event => event.type === 'cut');
   expect(state.events.slice(firstCut + 1, firstCut + 4)).toEqual([
-    { type: 'feed', dots: 8 }, { type: 'back', dots: 69 }, { type: 'raster', width: 360, height: 304 },
+    { type: 'feed', dots: 8 }, { type: 'back', dots: 69 }, { type: 'raster', width: 432, height: 304 },
   ]);
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
 });

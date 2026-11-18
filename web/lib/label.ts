@@ -30,8 +30,12 @@ export const initialLabel: LabelDraft = {
   marginTopMm: 1, marginRightMm: 1, marginBottomMm: 1, marginLeftMm: 1,
 };
 
+export function labelWidth(paperWidth: 58 | 80) {
+  return paperWidth === 58 ? 432 : 576;
+}
+
 export function labelSize(draft: LabelDraft) {
-  return { width: draft.paperWidth === 58 ? 360 : 576, height: Math.round(draft.heightMm * 8) };
+  return { width: labelWidth(draft.paperWidth), height: Math.round(draft.heightMm * 8) };
 }
 
 export function labelContentBox(draft: LabelDraft) {
