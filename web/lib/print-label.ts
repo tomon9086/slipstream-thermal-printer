@@ -110,7 +110,8 @@ export function printOptionError(height: number, options: PrintLabelOptions): st
   }
   if (options.marked && height > 320) return '49mmピッチのマーク紙では、印刷高さを40mm以下にしてください。';
   const reverse = 117 + Math.round(options.cutAdjustMm * 8) + 8 - 44;
-  if (options.marked && (reverse < 0 || reverse > 74)) return 'カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。';
+  const needsReverse = options.position === 'after-cut' || (options.cut && options.copies > 1);
+  if (options.marked && needsReverse && (reverse < 0 || reverse > 74)) return 'カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。';
   if (options.marked && !options.cut && options.copies > 1) return 'マーク紙の複数枚印刷は、1枚ごとのカットを有効にしてください。';
   return null;
 }
@@ -164,7 +165,8 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
       const black = await sii.ready();
       if (black && leading < 0) leading = dots;
       if (!black && leading >= 0) {
-        if (dots - leading < (leading === 0 ? 8 : 32) || dots - leading > 80) throw new Error('黒帯の幅が想定範囲外です。');
+        // 市販紙では2〜3mmの検出幅を確認済み。黒帯の途中から探索した場合は残り幅だけを読む。
+        if (dots - leading < (leading === 0 ? 8 : 16) || dots - leading > 80) throw new Error('黒帯の幅が想定範囲外です。');
         log(`黒帯終端を${dots / 8}mmで検出`);
         return dots;
       }
