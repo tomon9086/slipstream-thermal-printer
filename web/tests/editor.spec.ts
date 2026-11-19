@@ -36,10 +36,10 @@ const rasterWork = (page: Page) => page.evaluate(() => {
   return { encodings, blocked };
 });
 
-type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
+type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'missing-mark-after-raster' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
 
-async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
-  await page.addInitScript(failure => {
+async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDelayMm = 0) {
+  await page.addInitScript(({ failure, markDelayMm }) => {
     const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), settingWrites: [] as { index: number; value: number }[], transfers: 0, closes: 0, replyBlocked: false };
     state.settings[0] = 251;
     Object.assign(window, { editorUsb: state });
@@ -62,7 +62,9 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
         } else if (bytes[0] === 0x1d && bytes[1] === 0x72) {
           length = 3; if (bytes.length < length) return;
           const position = ((paperDots % 392) + 392) % 392;
-          const black = failure !== 'missing-mark' && position >= 184 && position < 232;
+          const missing = failure === 'missing-mark'
+            || (failure === 'missing-mark-after-raster' && state.events.some(event => event.type === 'raster' && event.height === 304));
+          const black = !missing && paperDots >= markDelayMm * 8 && position >= 184 && position < 232;
           queued.push(0xa0 | (bytes[2] === 8 && black ? 8 : 0));
         } else if (bytes[0] === 0x1d && bytes[1] === 0x76) {
           if (bytes.length < 8) return;
@@ -118,7 +120,7 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none') {
     Object.defineProperty(navigator, 'usb', { value: {
       getDevices: async () => [device], addEventListener() {}, removeEventListener() {},
     } });
-  }, failure);
+  }, { failure, markDelayMm });
 }
 
 test('操作ボタンなしで編集内容を白黒プレビューへ反映し、画面倍率に依存しないPNGを保存できる', async ({ page }) => {
@@ -419,7 +421,7 @@ test('フォント取得失敗を表示し、空の文字で画像生成しな�
 test('通常ロールの画像印字とカットの完了を確認し、本体設定を復元する', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
-  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('roll');
+  await expect(page.getByRole('combobox', { name: '用紙の種類', exact: true })).toHaveValue('roll');
   await page.getByRole('button', { name: 'USB接続', exact: true }).click();
   await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
   await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
@@ -477,6 +479,7 @@ test('通常ロールでもカットしない連続印刷は逆送りしない',
 test('マーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
   await page.getByRole('button', { name: 'USB接続', exact: true }).click();
   const print = page.getByRole('button', { name: 'このラベルを1枚印刷する' });
   await print.click();
@@ -497,6 +500,7 @@ test('マーク紙を印字し、次のジョブは同じ接続のカット位�
 test('2枚の印字とカットを交互に実行し、間の用紙を飛ばさない', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
   await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('2');
   await page.getByRole('button', { name: 'USB接続', exact: true }).click();
   const print = page.getByRole('button', { name: 'このラベルを2枚印刷する' });
@@ -583,11 +587,91 @@ for (const scenario of [
 test('黒帯が見つからなければ宛名とカットへ進まない', async ({ page }) => {
   await mockPrinter(page, 'missing-mark');
   await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
   await page.getByRole('button', { name: 'USB接続', exact: true }).click();
   await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('60mm以内に黒帯を検出できません');
   const state = await usbState(page);
   expect(state.events.filter(event => event.type === 'raster' && event.height === 304)).toHaveLength(0);
   expect(state.events.filter(event => event.type === 'cut')).toHaveLength(0);
+  expect(state.events.filter(event => event.type === 'raster')).toHaveLength(60);
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+for (const limit of [1, 80]) {
+  test(`黒帯がないときは設定した${limit}mmで探索を止め、設定値をエラーに表示する`, async ({ page }) => {
+    await mockPrinter(page, 'missing-mark');
+    await page.goto('/editor');
+    await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+    await page.getByText('印刷の詳細設定', { exact: true }).click();
+    const searchLimit = page.getByRole('spinbutton', { name: '黒帯の探索上限（mm）', exact: true });
+    await expect(searchLimit).toHaveValue('60');
+    await searchLimit.fill(String(limit));
+    await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+    await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(`${limit}mm以内に黒帯を検出できません`);
+    const state = await usbState(page);
+    expect(state.events.filter(event => event.type === 'raster')).toHaveLength(limit);
+    expect(state.events.filter(event => event.type === 'raster').every(event => event.height === 7)).toBe(true);
+    expect(state.events.filter(event => event.type === 'feed')).toHaveLength(limit);
+    expect(state.events.filter(event => event.type === 'feed').every(event => event.dots === 1)).toBe(true);
+    expect(state.events.filter(event => event.type === 'cut')).toHaveLength(0);
+    expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+  });
+}
+
+test('探索上限を増やすと60mmより先にある黒帯を上限位置で検出して印字できる', async ({ page }) => {
+  await mockPrinter(page, 'none', 60);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('spinbutton', { name: '黒帯の探索上限（mm）', exact: true }).fill('78');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+  const state = await usbState(page);
+  const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+  expect(state.events.slice(0, imageIndex).filter(event => event.type === 'raster')).toHaveLength(78);
+  expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('印字後の黒帯探索にも指定した上限を適用し、未検出ならカットしない', async ({ page }) => {
+  await mockPrinter(page, 'missing-mark-after-raster');
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('spinbutton', { name: '黒帯の探索上限（mm）', exact: true }).fill('32');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('32mm以内に黒帯を検出できません');
+  const state = await usbState(page);
+  const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+  expect(imageIndex).toBeGreaterThan(0);
+  expect(state.events.slice(imageIndex + 1).filter(event => event.type === 'raster')).toHaveLength(32);
+  expect(state.events.filter(event => event.type === 'cut')).toHaveLength(0);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('不正な探索上限ではUSB送信せず、通常ロールへ戻すと印刷できる', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await readyPreview(page);
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  const searchLimit = page.getByRole('spinbutton', { name: '黒帯の探索上限（mm）', exact: true });
+  const print = page.getByRole('button', { name: 'このラベルを1枚印刷する' });
+  for (const value of ['', '0', '-1', '1.5', '9007199254740991']) {
+    await searchLimit.fill(value);
+    await expect(page.getByText('黒帯の探索上限は1mm以上の整数で指定してください。', { exact: true })).toBeVisible();
+    await expect(print).toBeDisabled();
+    expect((await usbState(page)).transfers).toBe(0);
+  }
+  await searchLimit.fill('60');
+  await expect(print).toBeEnabled();
+  await searchLimit.fill('');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('roll');
+  await print.click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
 });
