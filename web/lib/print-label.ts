@@ -110,7 +110,8 @@ export function printOptionError(height: number, options: PrintLabelOptions): st
   }
   if (options.marked && height > 320) return '49mmピッチのマーク紙では、印刷高さを40mm以下にしてください。';
   const reverse = 117 + Math.round(options.cutAdjustMm * 8) + 8 - 44;
-  if (options.marked && (reverse < 0 || reverse > 74)) return 'カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。';
+  const needsReverse = options.position === 'after-cut' || (options.cut && options.copies > 1);
+  if (options.marked && needsReverse && (reverse < 0 || reverse > 74)) return 'カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。';
   if (options.marked && !options.cut && options.copies > 1) return 'マーク紙の複数枚印刷は、1枚ごとのカットを有効にしてください。';
   return null;
 }

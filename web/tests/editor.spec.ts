@@ -477,6 +477,64 @@ test('通常ロールでもカットしない連続印刷は逆送りしない',
   expect(state.events.map(event => event.type)).toEqual(['raster', 'feed', 'raster', 'feed']);
 });
 
+test('位置不明からの1枚は補正プラス1mmでも逆送りせず印字し、カット後の再開は上限で止める', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'カット位置の補正（mm）', exact: true }).fill('1');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  const print = page.getByRole('button', { name: 'このラベルを1枚印刷する' });
+  await print.click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+  const state = await usbState(page);
+  expect(state.events.filter(event => event.type === 'raster' && event.height === 304)).toHaveLength(1);
+  expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+  expect(state.events.some(event => event.type === 'back')).toBe(false);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+  await expect(print).toBeDisabled();
+  await expect(page.getByText('カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。', { exact: true })).toBeVisible();
+
+  // 次回カットを無効にしても、カット済み位置からの再開には逆送りが必要になる。
+  await page.getByRole('checkbox', { name: '1枚ごとにカットする', exact: true }).uncheck();
+  await expect(print).toBeDisabled();
+  expect((await usbState(page)).transfers).toBe(state.transfers);
+});
+
+test('位置不明からのカットなし単枚ジョブは補正プラス1mmでも逆送りせず続けて印字できる', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('checkbox', { name: '1枚ごとにカットする', exact: true }).uncheck();
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'カット位置の補正（mm）', exact: true }).fill('1');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  const print = page.getByRole('button', { name: 'このラベルを1枚印刷する' });
+  for (const copies of [1, 2]) {
+    await print.click();
+    await expect.poll(async () => (await usbState(page)).events.filter(event => event.type === 'raster' && event.height === 304).length).toBe(copies);
+    await expect(print).toBeEnabled();
+    await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字の完了応答を確認');
+  }
+  const state = await usbState(page);
+  expect(state.events.some(event => event.type === 'back' || event.type === 'cut')).toBe(false);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('カットする複数枚ジョブは最初の送信前に補正プラス1mmの逆送り上限超過を拒否する', async ({ page }) => {
+  await mockPrinter(page);
+  await page.goto('/editor');
+  await readyPreview(page);
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('combobox', { name: '枚数', exact: true }).selectOption('2');
+  await page.getByText('印刷の詳細設定', { exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'カット位置の補正（mm）', exact: true }).fill('1');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'このラベルを2枚印刷する' })).toBeDisabled();
+  await expect(page.getByText('カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。', { exact: true })).toBeVisible();
+  expect((await usbState(page)).transfers).toBe(0);
+});
+
 test('3mm幅の黒帯でマーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
