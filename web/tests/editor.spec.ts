@@ -36,14 +36,15 @@ const rasterWork = (page: Page) => page.evaluate(() => {
   return { encodings, blocked };
 });
 
-type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'missing-mark-after-raster' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
+type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'missing-mark-after-raster' | 'transient-white-after-reverse' | 'sensor-error-during-back' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
 
-async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDelayMm = 0, markWidth = 3) {
-  await page.addInitScript(({ failure, markDelayMm, markWidth }) => {
+async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDelayMm = 0, markWidth = 3, initialPaperDots = 0) {
+  await page.addInitScript(({ failure, markDelayMm, markWidth, initialPaperDots }) => {
     const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), settingWrites: [] as { index: number; value: number }[], transfers: 0, closes: 0, replyBlocked: false };
     state.settings[0] = 251;
     Object.assign(window, { editorUsb: state });
-    let bytes: number[] = [], queued: number[] = [], paperDots = 0;
+    let bytes: number[] = [], queued: number[] = [], paperDots = initialPaperDots;
+    let forwardTakeupDots = 0, transientWhite = false, injectedWhite = false;
     let replyReleased = false;
     const parse = () => {
       while (bytes.length >= 2) {
@@ -65,17 +66,29 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDel
           const missing = failure === 'missing-mark'
             || (failure === 'missing-mark-after-raster' && state.events.some(event => event.type === 'raster' && event.height === 304));
           // 市販紙で確認した3mm幅を既定とし、黒帯終端の位置と49mmピッチを保つ。
-          const black = !missing && paperDots >= markDelayMm * 8 && position >= 232 - markWidth * 8 && position < 232;
-          queued.push(0xa0 | (bytes[2] === 8 && black ? 8 : 0));
+          let black = !missing && paperDots >= markDelayMm * 8 && position >= 232 - markWidth * 8 && position < 232;
+          if (bytes[2] === 8 && transientWhite) { black = false; transientWhite = false; }
+          const error = failure === 'sensor-error-during-back' && bytes[2] === 1 && state.events.some(event => event.type === 'back');
+          queued.push(0xa0 | (error ? 1 : bytes[2] === 8 && black ? 8 : 0));
         } else if (bytes[0] === 0x1d && bytes[1] === 0x76) {
           if (bytes.length < 8) return;
           const rowBytes = bytes[4] + bytes[5] * 256, height = bytes[6] + bytes[7] * 256;
           length = 8 + rowBytes * height; if (bytes.length < length) return;
-          state.events.push({ type: 'raster', width: rowBytes * 8, height }); paperDots += height;
+          state.events.push({ type: 'raster', width: rowBytes * 8, height });
+          const takeup = Math.min(forwardTakeupDots, height);
+          paperDots += height - takeup; forwardTakeupDots -= takeup;
+          if (takeup > 0 && !injectedWhite) { transientWhite = true; injectedWhite = true; }
         } else if (bytes[0] === 0x1b && [0x4a, 0x6a].includes(bytes[1])) {
           length = 3; if (bytes.length < length) return;
           const reverse = bytes[1] === 0x6a;
-          paperDots += bytes[2] * (reverse ? -1 : 1);
+          if (reverse) {
+            paperDots -= bytes[2];
+            // 切り返し直後の送り不足と、一度だけ白を返す応答を組み合わせる。
+            if (failure === 'transient-white-after-reverse') forwardTakeupDots = 40;
+          } else {
+            const takeup = Math.min(forwardTakeupDots, bytes[2]);
+            paperDots += bytes[2] - takeup; forwardTakeupDots -= takeup;
+          }
           state.events.push({ type: reverse ? 'back' : 'feed', dots: bytes[2] });
         } else if (bytes[0] === 0x1d && bytes[1] === 0x56) {
           length = 3; if (bytes.length < length) return;
@@ -121,7 +134,7 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDel
     Object.defineProperty(navigator, 'usb', { value: {
       getDevices: async () => [device], addEventListener() {}, removeEventListener() {},
     } });
-  }, { failure, markDelayMm, markWidth });
+  }, { failure, markDelayMm, markWidth, initialPaperDots });
 }
 
 test('操作ボタンなしで編集内容を白黒プレビューへ反映し、画面倍率に依存しないPNGを保存できる', async ({ page }) => {
@@ -477,7 +490,7 @@ test('通常ロールでもカットしない連続印刷は逆送りしない',
   expect(state.events.map(event => event.type)).toEqual(['raster', 'feed', 'raster', 'feed']);
 });
 
-test('位置不明からの1枚は補正プラス1mmでも逆送りせず印字し、カット後の再開は上限で止める', async ({ page }) => {
+test('位置不明からの1枚は補正プラス1mmでも印字し、カット後の再開は戻し量の上限で止める', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
   await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
@@ -490,7 +503,7 @@ test('位置不明からの1枚は補正プラス1mmでも逆送りせず印字�
   const state = await usbState(page);
   expect(state.events.filter(event => event.type === 'raster' && event.height === 304)).toHaveLength(1);
   expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
-  expect(state.events.some(event => event.type === 'back')).toBe(false);
+  expect(state.events.filter(event => event.type === 'back').reduce((sum, event) => sum + event.dots!, 0)).toBe(74);
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
   await expect(print).toBeDisabled();
   await expect(page.getByText('カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。', { exact: true })).toBeVisible();
@@ -501,7 +514,7 @@ test('位置不明からの1枚は補正プラス1mmでも逆送りせず印字�
   expect((await usbState(page)).transfers).toBe(state.transfers);
 });
 
-test('位置不明からのカットなし単枚ジョブは補正プラス1mmでも逆送りせず続けて印字できる', async ({ page }) => {
+test('位置不明からのカットなし単枚ジョブは補正プラス1mmでも初回探索で続けて印字できる', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
   await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
@@ -517,7 +530,8 @@ test('位置不明からのカットなし単枚ジョブは補正プラス1mm�
     await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字の完了応答を確認');
   }
   const state = await usbState(page);
-  expect(state.events.some(event => event.type === 'back' || event.type === 'cut')).toBe(false);
+  expect(state.events.filter(event => event.type === 'back').reduce((sum, event) => sum + event.dots!, 0)).toBe(148);
+  expect(state.events.some(event => event.type === 'cut')).toBe(false);
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
 });
 
@@ -533,6 +547,90 @@ test('カットする複数枚ジョブは最初の送信前に補正プラス1m
   await expect(page.getByRole('button', { name: 'このラベルを2枚印刷する' })).toBeDisabled();
   await expect(page.getByText('カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。', { exact: true })).toBeVisible();
   expect((await usbState(page)).transfers).toBe(0);
+});
+
+for (const initialPaperDots of [232, 274, 305]) {
+  test(`紙交換後に黒帯終端を${(initialPaperDots - 232) / 8}mm通り過ぎていても逆送りで頭出しし、区画を飛ばさない`, async ({ page }) => {
+    await mockPrinter(page, 'none', 0, 3, initialPaperDots);
+    await page.goto('/editor');
+    await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+    await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+    await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+    await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+    const state = await usbState(page);
+    const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+    expect(imageIndex).toBeGreaterThan(0);
+    const alignment = state.events.slice(0, imageIndex);
+    const reversed = alignment.filter(event => event.type === 'back').reduce((sum, event) => sum + event.dots!, 0);
+    expect(reversed).toBeGreaterThan(initialPaperDots - 232);
+    expect(reversed).toBeLessThanOrEqual(74);
+    if (initialPaperDots === 305) expect(alignment.filter(event => event.type === 'back').at(-1)?.dots).toBe(2);
+    const printStart = initialPaperDots + alignment.reduce((sum, event) => sum + (event.type === 'raster'
+      ? event.height! : event.dots! * (event.type === 'back' ? -1 : 1)), 0);
+    // 次の区画へ進まず、直前の黒帯終端＋5.5mm（探索刻みの誤差内）から印字する。
+    expect(printStart).toBeGreaterThanOrEqual(232 + 44);
+    expect(printStart).toBeLessThan(232 + 44 + 8);
+    expect(state.events.slice(imageIndex + 1).filter(event => event.type === 'back')).toHaveLength(0);
+    expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+    expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+  });
+}
+
+test('逆送り後に一度だけ白を読んでも終端と誤認せず、白が安定してから印字する', async ({ page }) => {
+  await mockPrinter(page, 'transient-white-after-reverse', 0, 3, 240);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+  const state = await usbState(page);
+  const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+  expect(imageIndex).toBeGreaterThan(0);
+  expect(state.events.slice(0, imageIndex).filter(event => event.type === 'raster')).toHaveLength(6);
+  expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+test('開始時に黒帯上なら逆方向を探索せず、その黒帯の終端から頭出しする', async ({ page }) => {
+  await mockPrinter(page, 'none', 0, 3, 216);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+  const state = await usbState(page);
+  expect(state.events.filter(event => event.type === 'back')).toHaveLength(0);
+  const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+  expect(state.events.slice(0, imageIndex).filter(event => event.type === 'raster')).toHaveLength(2);
+});
+
+test('黒帯が9.25mmより後方なら開始位置へ戻してから次の黒帯を前方探索する', async ({ page }) => {
+  await mockPrinter(page, 'none', 0, 3, 307);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+  const state = await usbState(page);
+  const restoreIndex = state.events.findIndex(event => event.type === 'feed' && event.dots === 74);
+  expect(restoreIndex).toBeGreaterThan(0);
+  expect(state.events.slice(0, restoreIndex).every(event => event.type === 'back')).toBe(true);
+  expect(state.events.slice(0, restoreIndex).reduce((sum, event) => sum + event.dots!, 0)).toBe(74);
+  expect(state.events[restoreIndex + 1]).toEqual({ type: 'raster', width: 432, height: 7 });
+  const imageIndex = state.events.findIndex(event => event.type === 'raster' && event.height === 304);
+  expect(state.events.slice(restoreIndex + 1, imageIndex).filter(event => event.type === 'raster')).toHaveLength(40);
+});
+
+test('逆方向探索中に本体エラーが出たら後続の紙送り・印字・カットを止める', async ({ page }) => {
+  await mockPrinter(page, 'sensor-error-during-back');
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('本体を確認してください');
+  const state = await usbState(page);
+  expect(state.events).toEqual([{ type: 'back', dots: 8 }]);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
 });
 
 test('3mm幅の黒帯でマーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
@@ -703,8 +801,12 @@ for (const limit of [1, 80]) {
     const state = await usbState(page);
     expect(state.events.filter(event => event.type === 'raster')).toHaveLength(limit);
     expect(state.events.filter(event => event.type === 'raster').every(event => event.height === 7)).toBe(true);
-    expect(state.events.filter(event => event.type === 'feed')).toHaveLength(limit);
-    expect(state.events.filter(event => event.type === 'feed').every(event => event.dots === 1)).toBe(true);
+    const restored = state.events.findIndex(event => event.type === 'feed' && event.dots === 74);
+    expect(restored).toBeGreaterThan(0);
+    expect(state.events.slice(0, restored).reduce((sum, event) => sum + event.dots!, 0)).toBe(74);
+    const forwardFeeds = state.events.slice(restored + 1).filter(event => event.type === 'feed');
+    expect(forwardFeeds).toHaveLength(limit);
+    expect(forwardFeeds.every(event => event.dots === 1)).toBe(true);
     expect(state.events.filter(event => event.type === 'cut')).toHaveLength(0);
     expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
   });

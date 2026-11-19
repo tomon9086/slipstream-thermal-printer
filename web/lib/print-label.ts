@@ -157,12 +157,17 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
   probe.set([0x1d, 0x76, 0x30, 0, rowBytes, 0, 7, 0]);
   for (let y = 0; y < 7; y++) probe[8 + y * rowBytes] = 0x80;
   probe.set([0x1b, 0x4a, 1], probe.length - 3);
-  const seek = async () => {
+  const seek = async (confirmEnd = false) => {
     const searchLimitMm = options.markSearchLimit ?? DEFAULT_MARK_SEARCH_LIMIT;
     const searchLimitDots = searchLimitMm * 8;
     let leading = -1;
     for (let dots = 0; dots <= searchLimitDots; dots += 8) {
-      const black = await sii.ready();
+      let black = await sii.ready();
+      if (!black && leading >= 0 && confirmEnd) {
+        // 逆送り後に一時的な白を終端と誤認しないよう、紙を動かさず再確認する。
+        await pause(50);
+        black = await sii.ready();
+      }
       if (black && leading < 0) leading = dots;
       if (!black && leading >= 0) {
         // 市販紙では2〜3mmの検出幅を確認済み。黒帯の途中から探索した場合は残り幅だけを読む。
@@ -174,6 +179,28 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
     }
     throw new Error(`${searchLimitMm}mm以内に黒帯を検出できませんでした。カットせず停止しました。`);
   };
+  const seekInitial = async () => {
+    let black = await sii.ready();
+    let reversed = 0;
+    // 紙交換後など位置が不明な場合だけ、合計9.25mm以内で直前の黒帯を探す。
+    while (!black && reversed < 74) {
+      const dots = Math.min(8, 74 - reversed);
+      await sii.execute([0x1b, 0x6a, dots]);
+      reversed += dots;
+      await pause(20);
+      black = await sii.ready();
+    }
+    if (reversed > 0) {
+      if (black) log(`${reversed / 8}mm逆送りして黒帯を検出。順送りで終端を確認`);
+      else {
+        await feed(reversed);
+        await sii.ready();
+        log('9.25mmの逆送りで黒帯が見つからないため、開始位置へ戻して順送りで探索');
+      }
+    }
+    // 逆送りで見つけた境界は使わず、従来と同じ向きで黒帯終端を取り直す。
+    return seek(true);
+  };
   try {
     const expected = original.slice();
     for (const [index, value] of [[4, (original[3] & ~24) | (options.paperWidth === 80 ? 24 : 16)],
@@ -184,7 +211,7 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
     if (!(await sii.settings()).every((value, index) => value === expected[index])) throw new Error('用紙設定の確認に失敗しました。');
     await sii.execute([0x1d, 0x50, 0, 203, 0x1d, 0x4c, 0, 0, 0x1d, 0x57, raster.width & 255, raster.width >> 8, 0x1b, 0x61, 0]);
     if (options.position === 'after-cut') await returnFromCut();
-    else if (options.marked) { await seek(); await feed(44); }
+    else if (options.marked) { await seekInitial(); await feed(44); }
     for (let number = 1; number <= options.copies; number++) {
       if (number > 1 && options.cut) await returnFromCut();
       await sii.ready();

@@ -1,0 +1,599 @@
+{
+  "sourceBaseCommit": "c631cc41164b09650fbc86a8703db8498ab99af9",
+  "sourceFilesSha256": {
+    "web/lib/print-label.ts": "037d143b17494c93d12d7d6b318140578622d319672eca1aa38f1cc706ab9b13",
+    "web/tests/editor.spec.ts": "775db9b26bf2f3a54549a230111f4948e3da7cdf32adb07790627cc27e4b0cef"
+  },
+  "startedAt": "2026-11-19T12:21:28.470Z",
+  "finishedAt": "2026-11-19T12:21:41.041Z",
+  "browser": "159.0.8154.6",
+  "platform": "linux",
+  "usbDevice": {
+    "vendorId": "0619",
+    "productId": "0123"
+  },
+  "paper": "black-mark-label-roll-set-by-user",
+  "paperWidthMm": 80,
+  "imageDots": [
+    576,
+    304
+  ],
+  "nominalPitchMm": 49,
+  "cutAdjustMm": -1.5,
+  "cutFeedDots": 105,
+  "initialEndConfirmationMs": 50,
+  "preparation": {
+    "searchDots": 392,
+    "detectedMarkWidthMm": 3,
+    "forwardBeyondDetectedEndDots": 16,
+    "restored": true
+  },
+  "scenarios": [
+    {
+      "scenario": "initial-reverse-found",
+      "completed": true,
+      "alignmentFrames": [
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "feed",
+          "dots": 44
+        }
+      ],
+      "alignmentReverseDots": 56,
+      "postPrintSearchDots": 32,
+      "addressRasters": [
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 304
+        }
+      ],
+      "cuts": 1,
+      "allUsbWritesComplete": true,
+      "log": "12:21:31  GET_PORT_STATUS: 0x18\n12:21:31  7mm逆送りして黒帯を検出。順送りで終端を確認\n12:21:31  黒帯終端を6mmで検出\n12:21:32  黒帯終端を4mmで検出\n12:21:33  1/1枚：印字・カットの完了応答を確認\n12:21:33  本体の元設定40バイトを復元・確認",
+      "errors": [],
+      "usbTraceSha256": "51e69ffc9d2f18f5b5e14807d93ece67745e1669fbaf345780e8ef8f60cc0e2a",
+      "cutDispatchedAt": "2026-11-19T12:21:33.156Z"
+    },
+    {
+      "scenario": "resume-after-cut",
+      "completed": true,
+      "alignmentFrames": [
+        {
+          "type": "feed",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 69
+        }
+      ],
+      "alignmentReverseDots": 69,
+      "postPrintSearchDots": 56,
+      "addressRasters": [
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 304
+        }
+      ],
+      "cuts": 1,
+      "allUsbWritesComplete": true,
+      "log": "12:21:34  GET_PORT_STATUS: 0x18\n12:21:34  カット位置から戻して再開（開始時のマーク探索なし）\n12:21:35  黒帯終端を7mmで検出\n12:21:35  1/1枚：印字・カットの完了応答を確認\n12:21:35  本体の元設定40バイトを復元・確認",
+      "errors": [],
+      "usbTraceSha256": "77077da559ca9162de9037615d076aa9dce277a4f29b4ddb04da3e1c81586c4d",
+      "cutDispatchedAt": "2026-11-19T12:21:35.416Z"
+    },
+    {
+      "scenario": "initial-reverse-not-found",
+      "completed": true,
+      "alignmentFrames": [
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 8
+        },
+        {
+          "type": "back",
+          "dots": 2
+        },
+        {
+          "type": "feed",
+          "dots": 74
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 7
+        },
+        {
+          "type": "feed",
+          "dots": 1
+        },
+        {
+          "type": "feed",
+          "dots": 44
+        }
+      ],
+      "alignmentReverseDots": 74,
+      "postPrintSearchDots": 48,
+      "addressRasters": [
+        {
+          "type": "raster",
+          "width": 576,
+          "height": 304
+        }
+      ],
+      "cuts": 1,
+      "allUsbWritesComplete": true,
+      "log": "12:21:36  GET_PORT_STATUS: 0x18\n12:21:37  9.25mmの逆送りで黒帯が見つからないため、開始位置へ戻して順送りで探索\n12:21:38  黒帯終端を37mmで検出\n12:21:38  黒帯終端を6mmで検出\n12:21:39  1/1枚：印字・カットの完了応答を確認\n12:21:39  本体の元設定40バイトを復元・確認",
+      "errors": [],
+      "usbTraceSha256": "99ea8067672231170ff2c9928d1f04b8abc79c6dd82df398a4dfb894894d03c0",
+      "cutDispatchedAt": "2026-11-19T12:21:38.804Z"
+    }
+  ],
+  "settingsRestored": true,
+  "settingsReadbackBytes": 40,
+  "originalSettings": "fbf0f0ff98060400002c0180ffff0000ffffffffffffffffffffffffffffffffffffffffffffffff",
+  "finalSettings": "fbf0f0ff98060400002c0180ffff0000ffffffffffffffffffffffffffffffffffffffffffffffff",
+  "finalSensors": 0,
+  "finalErrors": 0,
+  "temporaryPolicyRemoved": true,
+  "deviceOwnerRestored": true,
+  "beforeFix": {
+    "initialReverseDots": 56,
+    "initialEndSearchDots": 8,
+    "observedPitchMm": 53.625,
+    "addressRasters": 1,
+    "cuts": 0,
+    "error": "用紙の間隔が49mmから外れています。カットせず停止しました。",
+    "settingsRestored": true
+  },
+  "directionDiagnostic": {
+    "forwardPitchMm": 49,
+    "reverseDots": 56,
+    "recoveryForwardDots": 48,
+    "settingsRestored": true,
+    "physicalCauseConfirmed": false
+  },
+  "regressionTestFailsWithoutEndConfirmation": true,
+  "physicalAppearanceVerified": false,
+  "physicalCutAlignmentVerified": false,
+  "qrReadVerified": false
+}

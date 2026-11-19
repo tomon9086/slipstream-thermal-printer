@@ -221,7 +221,7 @@ export default function EditorPage() {
             </div>
             <label className={styles.toggle}><input type="checkbox" checked={cut} onChange={event => setCut(event.target.checked)} />1枚ごとにカットする</label>
             {marked && <>
-              <p className={styles.hint}>{position === 'after-cut' ? '前回のカット位置から再開します。開始時の空送りはしません。' : '最初に黒帯へ位置を合わせます。未使用区画を送る場合があります。'}</p>
+              <p className={styles.hint}>{position === 'after-cut' ? '前回のカット位置から再開します。開始時の空送りはしません。' : '最初に黒帯へ位置を合わせます。白い部分からは最大9.25mm戻して探し、見つからなければ前へ送ります。未使用区画を送る場合があります。'}</p>
             </>}
             {!marked && <p className={styles.hint}>{position === 'after-cut'
               ? '前回のカット位置から9.25mm戻し、上余白を減らして再開します。'
