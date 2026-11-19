@@ -38,8 +38,8 @@ const rasterWork = (page: Page) => page.evaluate(() => {
 
 type PrinterFailure = 'none' | 'short-raster' | 'missing-mark' | 'missing-mark-after-raster' | 'reply-timeout-before-print' | 'reply-timeout-after-raster' | 'reply-timeout-after-cut';
 
-async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDelayMm = 0) {
-  await page.addInitScript(({ failure, markDelayMm }) => {
+async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDelayMm = 0, markWidth = 3) {
+  await page.addInitScript(({ failure, markDelayMm, markWidth }) => {
     const state = { events: [] as { type: string; dots?: number; height?: number; width?: number; at?: number }[], settings: Array(40).fill(255), settingWrites: [] as { index: number; value: number }[], transfers: 0, closes: 0, replyBlocked: false };
     state.settings[0] = 251;
     Object.assign(window, { editorUsb: state });
@@ -64,7 +64,8 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDel
           const position = ((paperDots % 392) + 392) % 392;
           const missing = failure === 'missing-mark'
             || (failure === 'missing-mark-after-raster' && state.events.some(event => event.type === 'raster' && event.height === 304));
-          const black = !missing && paperDots >= markDelayMm * 8 && position >= 184 && position < 232;
+          // 市販紙で確認した3mm幅を既定とし、黒帯終端の位置と49mmピッチを保つ。
+          const black = !missing && paperDots >= markDelayMm * 8 && position >= 232 - markWidth * 8 && position < 232;
           queued.push(0xa0 | (bytes[2] === 8 && black ? 8 : 0));
         } else if (bytes[0] === 0x1d && bytes[1] === 0x76) {
           if (bytes.length < 8) return;
@@ -120,7 +121,7 @@ async function mockPrinter(page: Page, failure: PrinterFailure = 'none', markDel
     Object.defineProperty(navigator, 'usb', { value: {
       getDevices: async () => [device], addEventListener() {}, removeEventListener() {},
     } });
-  }, { failure, markDelayMm });
+  }, { failure, markDelayMm, markWidth });
 }
 
 test('操作ボタンなしで編集内容を白黒プレビューへ反映し、画面倍率に依存しないPNGを保存できる', async ({ page }) => {
@@ -476,7 +477,7 @@ test('通常ロールでもカットしない連続印刷は逆送りしない',
   expect(state.events.map(event => event.type)).toEqual(['raster', 'feed', 'raster', 'feed']);
 });
 
-test('マーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
+test('3mm幅の黒帯でマーク紙を印字し、次のジョブは同じ接続のカット位置から空送りせずに再開する', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
   await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
@@ -497,7 +498,7 @@ test('マーク紙を印字し、次のジョブは同じ接続のカット位�
   expect(second.settings).toEqual([251, ...Array(39).fill(255)]);
 });
 
-test('2枚の印字とカットを交互に実行し、間の用紙を飛ばさない', async ({ page }) => {
+test('3mm幅の黒帯で2枚の印字とカットを交互に実行し、間の用紙を飛ばさない', async ({ page }) => {
   await mockPrinter(page);
   await page.goto('/editor');
   await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
@@ -515,6 +516,37 @@ test('2枚の印字とカットを交互に実行し、間の用紙を飛ばさ�
   expect(state.events.slice(firstCut + 1, firstCut + 4)).toEqual([
     { type: 'feed', dots: 8 }, { type: 'back', dots: 69 }, { type: 'raster', width: 432, height: 304 },
   ]);
+  expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+});
+
+for (const markWidth of [2, 6]) {
+  test(`検出幅${markWidth}mmの黒帯でも80mm設定の宛名を印字し、カット後に設定を復元する`, async ({ page }) => {
+    await mockPrinter(page, 'none', 0, markWidth);
+    await page.goto('/editor');
+    await page.getByRole('combobox', { name: '用紙幅', exact: true }).selectOption('80');
+    await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+    await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+    await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+    await expect(page.getByRole('status', { name: '処理結果' })).toContainText('1枚の印字・カットの完了応答を確認');
+    const state = await usbState(page);
+    expect(state.events.filter(event => event.type === 'raster' && event.height === 304)).toEqual([
+      { type: 'raster', width: 576, height: 304 },
+    ]);
+    expect(state.events.filter(event => event.type === 'cut')).toHaveLength(1);
+    expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
+  });
+}
+
+test('白から読んだ黒帯の検出幅が1mmなら宛名を印字せず停止する', async ({ page }) => {
+  await mockPrinter(page, 'none', 0, 1);
+  await page.goto('/editor');
+  await page.getByRole('combobox', { name: '用紙の種類', exact: true }).selectOption('marked');
+  await page.getByRole('button', { name: 'USB接続', exact: true }).click();
+  await page.getByRole('button', { name: 'このラベルを1枚印刷する' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('黒帯の幅が想定範囲外です');
+  const state = await usbState(page);
+  expect(state.events.some(event => event.type === 'raster' && event.height === 304)).toBe(false);
+  expect(state.events.some(event => event.type === 'cut')).toBe(false);
   expect(state.settings).toEqual([251, ...Array(39).fill(255)]);
 });
 

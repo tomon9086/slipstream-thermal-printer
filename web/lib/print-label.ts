@@ -164,7 +164,8 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
       const black = await sii.ready();
       if (black && leading < 0) leading = dots;
       if (!black && leading >= 0) {
-        if (dots - leading < (leading === 0 ? 8 : 32) || dots - leading > 80) throw new Error('黒帯の幅が想定範囲外です。');
+        // 市販紙では2〜3mmの検出幅を確認済み。黒帯の途中から探索した場合は残り幅だけを読む。
+        if (dots - leading < (leading === 0 ? 8 : 16) || dots - leading > 80) throw new Error('黒帯の幅が想定範囲外です。');
         log(`黒帯終端を${dots / 8}mmで検出`);
         return dots;
       }
