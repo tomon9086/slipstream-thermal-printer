@@ -72,6 +72,35 @@ $module = Import-Module (Join-Path $PSScriptRoot '../WinUsb.psm1') -Force -PassT
         Assert-Throws { Invoke-UsbInstaller $hostPath @('-NoProfile', '-Command', 'exit 7') } '終了コード: 7'
     }
 
+    function New-DiscoveryDevice([string]$Id, [string]$Service = 'usbprint', [string]$Name = 'Receipt Printer', [string]$Serial = 'unit1') {
+        $device = New-Device $Id $Service $Serial
+        $device | Add-Member -NotePropertyName BusReportedName -NotePropertyValue $Name
+        $device | Add-Member -NotePropertyName CompatibleIds -NotePropertyValue @('USB\Class_07&SubClass_01&Prot_02')
+        return $device
+    }
+    Test-Case 'MIを16進数から復号し、MIなしの番号は推測しない' {
+        $candidate = ConvertTo-UsbCandidate (New-DiscoveryDevice "$baseId&MI_0A")
+        Assert-True ($candidate.UsbInterface -eq 10 -and $candidate.VendorId -eq '0619' -and $candidate.ProductId -eq '0123')
+        $candidate = ConvertTo-UsbCandidate (New-DiscoveryDevice $baseId)
+        Assert-True ($null -eq $candidate.UsbInterface -and $candidate.IsPrinterCandidate)
+        $draft = New-UsbDraftProfile $candidate $null
+        Assert-True ($null -eq $draft.usbInterface -and $draft.allowedServices -contains 'usbprint' -and $draft.allowedServices -contains 'WinUSB')
+    }
+    Test-Case 'USB以外の印刷キューは候補に混ぜない' {
+        $candidate = ConvertTo-UsbCandidate (New-DiscoveryDevice 'USBPRINT\Printer')
+        Assert-True ($null -eq $candidate)
+    }
+    Test-Case '名前がプリンターでも親・HID・仮想COMのひな形は生成しない' {
+        foreach ($service in @('usbccgp', 'HidUsb', 'usbser', 'USBSTOR', 'USBHUB3', '')) {
+            $candidate = ConvertTo-UsbCandidate (New-DiscoveryDevice $baseId $service)
+            Assert-True (-not $candidate.CanDraftProfile)
+            Assert-Throws { New-UsbDraftProfile $candidate 0 } 'ひな形'
+        }
+        $device = New-DiscoveryDevice $baseId 'vendorDriver'
+        $device.CompatibleIds = @('USB\Class_03&SubClass_00')
+        Assert-True (-not (ConvertTo-UsbCandidate $device).CanDraftProfile)
+    }
+
     function Assert-UsbWindows {}
     function Assert-UsbAdministrator {
         if (-not $script:admin) { throw '管理者権限がありません。' }
@@ -86,6 +115,15 @@ $module = Import-Module (Join-Path $PSScriptRoot '../WinUsb.psm1') -Force -PassT
         return $script:before
     }
     function Get-UsbInterfaceGuids { param($InstanceId); return $script:guids }
+    function Get-UsbDiscoveryDevices {
+        $script:discoveryCalls++
+        return $script:discovery
+    }
+    function Read-Host {
+        param([string]$Prompt)
+        if ($script:answers.Count -eq 0) { throw "対話の入力が不足しています: $Prompt" }
+        return $script:answers.Dequeue()
+    }
     function Backup-UsbDriver {
         param($Target, [string]$RunDirectory)
         $script:backupCalls++
@@ -106,6 +144,9 @@ $module = Import-Module (Join-Path $PSScriptRoot '../WinUsb.psm1') -Force -PassT
         $script:backupCalls = 0
         $script:backupFails = $false
         $script:changed = $false
+        $script:discoveryCalls = 0
+        $script:discovery = @((ConvertTo-UsbCandidate (New-DiscoveryDevice $baseId)))
+        $script:answers = New-Object 'System.Collections.Generic.Queue[string]'
         $script:admin = $true
         $script:guids = @('{594dee51-0a1d-4a77-bf5d-5e2eb808267c}')
     }
@@ -205,6 +246,72 @@ $module = Import-Module (Join-Path $PSScriptRoot '../WinUsb.psm1') -Force -PassT
             } 'インストーラー失敗'
             Assert-True ($script:installerCalls -eq 1)
             Assert-True (@(Get-ChildItem $state -Filter before.json -Recurse).Count -eq 1)
+        }
+        Test-Case '候補選択では範囲外入力を受け付けず保存を断ればファイルを作らない' {
+            Reset-State
+            foreach ($answer in @('invalid', '999', '1', 'n')) { $script:answers.Enqueue($answer) }
+            $state = Join-Path $temp 'discovery-no-save'
+            $result = Find-WebUsbPrinter -OutputDirectory $state
+            Assert-True ($result.VendorId -eq '0619' -and -not (Test-Path $state))
+            Assert-True ($script:installerCalls -eq 0 -and $script:backupCalls -eq 0)
+        }
+        Test-Case '未接続でも対話を中断できる' {
+            Reset-State
+            $script:discovery = @()
+            $script:answers.Enqueue('q')
+            Assert-True ($null -eq (Find-WebUsbPrinter))
+        }
+        Test-Case '全USB表示と再読込によりプリンター候補以外も調査できる' {
+            Reset-State
+            $other = New-DiscoveryDevice 'USB\VID_1111&PID_2222' 'vendorDriver' 'Z Other Device'
+            $other.CompatibleIds = @()
+            $script:discovery += ConvertTo-UsbCandidate $other
+            foreach ($answer in @('a', 'r', '2', 'n')) { $script:answers.Enqueue($answer) }
+            $result = Find-WebUsbPrinter
+            Assert-True ($result.VendorId -eq '1111' -and $script:discoveryCalls -eq 3)
+        }
+        Test-Case '同型機でも個体を番号で区別して選べる' {
+            Reset-State
+            $script:discovery += ConvertTo-UsbCandidate (New-DiscoveryDevice $baseId 'usbprint' 'Receipt Printer' 'unit2')
+            foreach ($answer in @('2', 'n')) { $script:answers.Enqueue($answer) }
+            $result = Find-WebUsbPrinter
+            Assert-True ($result.Device.InstanceId -eq "$baseId\unit2")
+        }
+        Test-Case 'MI付き機器は追加入力なしで観測した番号のひな形を保存する' {
+            Reset-State
+            $script:discovery = @((ConvertTo-UsbCandidate (New-DiscoveryDevice "$baseId&MI_0A")))
+            foreach ($answer in @('1', 'y')) { $script:answers.Enqueue($answer) }
+            $state = Join-Path $temp 'discovery-mi'
+            Find-WebUsbPrinter -OutputDirectory $state | Out-Null
+            $draft = Get-ChildItem $state -Filter profile.draft.json -Recurse | Get-Content -Raw | ConvertFrom-Json
+            Assert-True ($draft.usbInterface -eq 10 -and $draft.allowedServices -contains 'WinUSB')
+            Assert-True (@(Get-ChildItem $state -Filter device.json -Recurse).Count -eq 1)
+            Assert-True ($script:installerCalls -eq 0 -and $script:backupCalls -eq 0)
+        }
+        Test-Case 'MIなしで未確認のまま保存しても番号0を自動設定しない' {
+            Reset-State
+            foreach ($answer in @('1', 'y', '')) { $script:answers.Enqueue($answer) }
+            $state = Join-Path $temp 'discovery-unknown'
+            Find-WebUsbPrinter -OutputDirectory $state | Out-Null
+            $draft = Get-ChildItem $state -Filter profile.draft.json -Recurse | Get-Content -Raw | ConvertFrom-Json
+            Assert-True ($null -eq $draft.usbInterface)
+        }
+        Test-Case '利用者が確認した番号は範囲を検証して保存する' {
+            Reset-State
+            foreach ($answer in @('1', 'y', '256', '-1', 'invalid', '0')) { $script:answers.Enqueue($answer) }
+            $state = Join-Path $temp 'discovery-explicit'
+            Find-WebUsbPrinter -OutputDirectory $state | Out-Null
+            $draft = Get-ChildItem $state -Filter profile.draft.json -Recurse | Get-Content -Raw | ConvertFrom-Json
+            Assert-True ($draft.usbInterface -eq 0)
+        }
+        Test-Case '複合親の選択では調査結果だけ保存し導入用ひな形を作らない' {
+            Reset-State
+            $script:discovery = @((ConvertTo-UsbCandidate (New-DiscoveryDevice $baseId 'usbccgp')))
+            foreach ($answer in @('1', 'y')) { $script:answers.Enqueue($answer) }
+            $state = Join-Path $temp 'discovery-parent'
+            Find-WebUsbPrinter -ShowAll -OutputDirectory $state | Out-Null
+            Assert-True (@(Get-ChildItem $state -Filter device.json -Recurse).Count -eq 1)
+            Assert-True (@(Get-ChildItem $state -Filter profile.draft.json -Recurse).Count -eq 0)
         }
     } finally {
         Remove-Item -LiteralPath $temp -Recurse -Force

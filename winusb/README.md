@@ -10,9 +10,49 @@
 - Windows 10/11、Windows PowerShell 5.1またはPowerShell 7。`PnpDevice`モジュールが必要です。
 - `Install`では管理者権限。昇格や実行ポリシーの変更はスクリプトから行いません。
 - `Install`では、信頼できるソースからビルドした**libwdiの`wdi-simple.exe`**。
-  `Inspect`・`Verify`・`Install -WhatIf`では実行ファイルは不要です。
+  機器調査・`Inspect`・`Verify`・`Install -WhatIf`では実行ファイルは不要です。
 
-### wdi-simpleの用意
+## IDが分からない機器を調査する
+
+プリンターをWindows PCへ接続し、リポジトリルートから実行します。
+調査には管理者権限や`wdi-simple.exe`は不要です。
+
+```powershell
+.\winusb\Find-WebUsbPrinter.ps1
+```
+
+USB Printer Class、現在の`usbprint`サービス、機器名を手掛かりに候補を表示します。
+番号で選択すると、VID・PID、MIがあればインターフェース番号、機器名、現在のサービス、
+INF、ドライバー提供元などをまとめて表示します。同じIDの機器もInstanceId付きで別々に表示します。
+印刷キューではなく、USBに接続された機器の情報を調べます。
+
+```text
+[1] SII RP-E10 Series. | 0619:0123 | Interface=未確認 | Service=usbprint
+    USB\VID_0619&PID_0123\...
+番号を選択（a:全USB機器、r:再読込、q:終了）:
+```
+
+候補が見つからなければ他のUSB機器も表示します。`a`で全USB機器、`r`で再読込、`q`で終了できます。
+最初から全件を表示したい場合は`-ShowAll`を指定します。
+候補判定は目安なので、機器名と抜き差しによる一覧の変化も使って対象を特定してください。
+
+保存を選ぶと`state/discovery/実行ごとのID/`に`device.json`と`profile.draft.json`を保存します。
+保存先の親フォルダーは`-OutputDirectory C:\SlipStream\discovery`で変更できます。
+ドライバーの変更や導入処理への自動移行は行いません。
+
+- 複合USB機器の子では、`MI_0A`ならインターフェース番号は10と判定します。
+- **MIがない機器のインターフェース番号はPnP情報だけでは確定できません。**
+  確認済みなら番号を入力でき、未確認でEnterを押すとJSONにも`null`を残します。自動で0にはしません。
+- `allowedServices`には観測した現在のサービスと`WinUSB`を候補として記録します。
+  この値は、そのメーカー製ドライバーからの変更が検証済みであることを意味しません。
+- 複合機器の親、仮想COM、HID等と判定した機器や現在のサービスが不明な機器では、調査結果だけを保存します。
+
+JSONの`name`、`usbInterface`、`allowedServices`を確認し、`models/任意の機種名.json`へコピーすると
+`Setup-WebUsbPrinter.ps1 -Model 任意の機種名 ...`で使えます。`usbInterface: null`のままでは導入できません。
+MIがない場合は、メーカー資料やUSB記述子を表示するツール（USBViewなど）で番号を確認します。
+このリポジトリのRP-E11では、既存の実機調査でインターフェース0を確認しています。
+
+## WinUSB導入用CLIの用意
 
 `wdi-simple`はZadigと同じlibwdiを使う公式CLIサンプルです。Windows標準コマンドではありません。
 確認したlibwdi v1.5.1の公式リリース添付はZadigのみで、CLIの実行ファイルは含まれません。
@@ -132,8 +172,9 @@ WindowsのPnpDevice・レジストリ・管理者判定・インストーラー�
 外部プロセスの失敗終了も、小さなPowerShell子プロセスで確認します。
 初回はLinuxのPowerShellとWindowsのPowerShell 7／Windows PowerShell 5.1で、19件のテストに成功しました
 （[確認時の実行結果](https://github.com/tomon9086/slipstream-thermal-printer/actions/runs/44319894070)）。
+機器調査の追加後は、候補判定・対話選択・未確認値の保持・JSON保存も含む30件をLinuxのPowerShellで確認しています。
 継続的なCIは設置せず、変更時は上のコマンドで必要に応じて確認します。
-**Windows実機でのドライバー変更、libwdiのビルド、RP-E11へのWebUSB通信は未検証です。**
+**Windows実機での機器調査・ドライバー変更、libwdiのビルド、RP-E11へのWebUSB通信は未検証です。**
 
 参考:
 

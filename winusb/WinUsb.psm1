@@ -44,16 +44,140 @@ function Get-UsbSnapshot {
     $prefix = 'USB\VID_{0}&PID_{1}' -f $Profile.vendorId, $Profile.productId
     foreach ($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)) {
         if (-not $device.InstanceId.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { continue }
-        $properties = @(Get-PnpDeviceProperty -InstanceId $device.InstanceId -ErrorAction Stop)
         # 同じVID/PIDの親と子を記録し、選択はハードウェアIDで厳密に行う。
-        [pscustomobject]@{
-            InstanceId = $device.InstanceId
-            FriendlyName = $device.FriendlyName
-            HardwareIds = @(Get-UsbProperty $properties 'DEVPKEY_Device_HardwareIds')
-            Service = [string](Get-UsbProperty $properties 'DEVPKEY_Device_Service')
-            DriverInfPath = [string](Get-UsbProperty $properties 'DEVPKEY_Device_DriverInfPath')
-            ProblemCode = Get-UsbProperty $properties 'DEVPKEY_Device_ProblemCode'
+        Get-UsbDeviceInfo $device
+    }
+}
+
+function Get-UsbDeviceInfo {
+    param($Device)
+    $properties = @(Get-PnpDeviceProperty -InstanceId $Device.InstanceId -ErrorAction Stop)
+    [pscustomobject]@{
+        InstanceId = $Device.InstanceId
+        FriendlyName = $Device.FriendlyName
+        BusReportedName = [string](Get-UsbProperty $properties 'DEVPKEY_Device_BusReportedDeviceDesc')
+        HardwareIds = @(Get-UsbProperty $properties 'DEVPKEY_Device_HardwareIds')
+        CompatibleIds = @(Get-UsbProperty $properties 'DEVPKEY_Device_CompatibleIds')
+        Service = [string](Get-UsbProperty $properties 'DEVPKEY_Device_Service')
+        DriverInfPath = [string](Get-UsbProperty $properties 'DEVPKEY_Device_DriverInfPath')
+        DriverProvider = [string](Get-UsbProperty $properties 'DEVPKEY_Device_DriverProvider')
+        ProblemCode = Get-UsbProperty $properties 'DEVPKEY_Device_ProblemCode'
+    }
+}
+
+function ConvertTo-UsbCandidate {
+    param($Device)
+    if ($Device.InstanceId -notmatch '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})(?:&MI_([0-9A-F]{2}))?\\') { return }
+    $vendorId = $Matches[1].ToUpperInvariant()
+    $productId = $Matches[2].ToUpperInvariant()
+    $interfaceNumber = $null
+    if ($Matches[3]) { $interfaceNumber = [Convert]::ToInt32($Matches[3], 16) }
+    $name = $Device.BusReportedName
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = $Device.FriendlyName }
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = $Device.InstanceId }
+    $printerClass = @($Device.CompatibleIds | Where-Object { $_ -match '^USB\\Class_07(?:&|$)' }).Count -gt 0
+    $printerHint = $printerClass -or $Device.Service -ieq 'usbprint' -or $name -match 'printer|printing|receipt|プリンタ|印刷'
+    $unsupported = $Device.Service -match '^(usbccgp|usbser|HidUsb|USBSTOR|UASPStor|USBHUB3?|usbhub)$' -or
+        @($Device.CompatibleIds | Where-Object { $_ -match '^USB\\Class_(02|03|08|09)(?:&|$)' }).Count -gt 0
+    [pscustomobject]@{
+        Name = $name
+        VendorId = $vendorId
+        ProductId = $productId
+        UsbInterface = $interfaceNumber
+        Service = $Device.Service
+        IsPrinterCandidate = $printerHint -and -not $unsupported
+        CanDraftProfile = -not $unsupported -and -not [string]::IsNullOrWhiteSpace($Device.Service)
+        Device = $Device
+    }
+}
+
+function Get-UsbDiscoveryDevices {
+    foreach ($device in @(Get-PnpDevice -PresentOnly -ErrorAction Stop)) {
+        if ($device.InstanceId -notmatch '^USB\\VID_[0-9A-F]{4}&PID_[0-9A-F]{4}') { continue }
+        try {
+            ConvertTo-UsbCandidate (Get-UsbDeviceInfo $device)
+        } catch {
+            Write-Warning "情報を取得できない機器をスキップしました: $($device.InstanceId): $_"
         }
+    }
+}
+
+function New-UsbDraftProfile {
+    param($Candidate, $InterfaceNumber)
+    if (-not $Candidate.CanDraftProfile) { throw 'このUSB動作モードではWinUSB用ひな形を作成できません。' }
+    [ordered]@{
+        schemaVersion = 1
+        name = "$($Candidate.Name) WebUSB"
+        vendorId = $Candidate.VendorId
+        productId = $Candidate.ProductId
+        usbInterface = $InterfaceNumber
+        # 観測したサービスを候補として記録する。導入前に利用者が内容を確認する。
+        allowedServices = @(@($Candidate.Service, 'WinUSB') | Select-Object -Unique)
+    }
+}
+
+function Find-WebUsbPrinter {
+    [CmdletBinding()]
+    param([switch]$ShowAll, [string]$OutputDirectory = (Join-Path $PSScriptRoot 'state/discovery'))
+    Assert-UsbWindows
+    while ($true) {
+        $devices = @(Get-UsbDiscoveryDevices | Sort-Object @{ Expression = 'IsPrinterCandidate'; Descending = $true }, Name, @{ Expression = { $_.Device.InstanceId } })
+        $visible = @($devices | Where-Object { $ShowAll -or $_.IsPrinterCandidate })
+        if ($visible.Count -eq 0 -and $devices.Count -gt 0) {
+            Write-Host 'プリンター候補が見つからないため、他のUSB機器も表示します。'
+            $visible = $devices
+        }
+        if ($devices.Count -eq 0) { Write-Host '対象のUSB機器が見つかりません。接続後に再読込してください。' }
+        for ($index = 0; $index -lt $visible.Count; $index++) {
+            $item = $visible[$index]
+            $mi = '未確認'
+            if ($null -ne $item.UsbInterface) { $mi = [string]$item.UsbInterface }
+            Write-Host ("[{0}] {1} | {2}:{3} | Interface={4} | Service={5}" -f ($index + 1), $item.Name, $item.VendorId, $item.ProductId, $mi, $item.Service)
+            Write-Host "    $($item.Device.InstanceId)"
+        }
+        $answer = Read-Host '番号を選択（a:全USB機器、r:再読込、q:終了）'
+        if ($answer -ieq 'q') { return }
+        if ($answer -ieq 'a') { $ShowAll = [switch]$true; continue }
+        if ($answer -ieq 'r') { continue }
+        $number = 0
+        if (-not [int]::TryParse($answer, [ref]$number) -or $number -lt 1 -or $number -gt $visible.Count) {
+            Write-Host '表示された番号を入力してください。'
+            continue
+        }
+        $selected = $visible[$number - 1]
+        Write-Host '選択したUSB機器の調査結果:'
+        $selected.Device | Format-List | Out-Host
+        Write-Host "VID=$($selected.VendorId) / PID=$($selected.ProductId) / 表示名候補=$($selected.Name)"
+        if ($null -eq $selected.UsbInterface) {
+            Write-Host 'MIのない機器ではUSBインターフェース番号をPnP情報だけから確定できません。'
+        } else { Write-Host "USBインターフェース番号（MIから取得）: $($selected.UsbInterface)" }
+        if ((Read-Host '調査結果と設定ひな形を保存しますか？（y/N）') -ine 'y') { return $selected }
+
+        $interfaceNumber = $selected.UsbInterface
+        if ($selected.CanDraftProfile -and $null -eq $interfaceNumber) {
+            while ($true) {
+                $answer = Read-Host '確認済みのUSBインターフェース番号（0〜255、未確認ならEnter）'
+                if ([string]::IsNullOrWhiteSpace($answer)) { break }
+                $parsed = 0
+                if ([int]::TryParse($answer, [ref]$parsed) -and $parsed -ge 0 -and $parsed -le 255) {
+                    $interfaceNumber = $parsed
+                    break
+                }
+                Write-Host '0〜255の整数か、未確認ならEnterを入力してください。'
+            }
+        }
+        $directory = Join-Path ([IO.Path]::GetFullPath($OutputDirectory)) ([guid]::NewGuid().ToString())
+        $null = New-Item -ItemType Directory -Path $directory
+        $selected | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $directory 'device.json') -Encoding UTF8
+        if ($selected.CanDraftProfile) {
+            New-UsbDraftProfile $selected $interfaceNumber | ConvertTo-Json -Depth 4 |
+                Set-Content -LiteralPath (Join-Path $directory 'profile.draft.json') -Encoding UTF8
+            Write-Host '設定ひな形を保存しました。usbInterfaceとallowedServicesを確認してからmodelsへ配置してください。'
+        } else {
+            Write-Host '親デバイス・仮想COM等やサービス不明の機器は、調査結果だけを保存しました。'
+        }
+        Write-Host "保存先: $directory"
+        return $selected
     }
 }
 
@@ -193,4 +317,4 @@ function Invoke-WebUsbSetup {
     return $installed
 }
 
-Export-ModuleMember -Function Invoke-WebUsbSetup
+Export-ModuleMember -Function Invoke-WebUsbSetup, Find-WebUsbPrinter
