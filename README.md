@@ -4,7 +4,8 @@
 レシートプリンターをハックする
 
 ブラウザからUSBへ直接送る検証用Next.jsアプリは [web/README.md](web/README.md) を参照してください。
-WindowsのWinUSB設定を共通PowerShellと機種別プロファイルで行う手順は [winusb/README.md](winusb/README.md) を参照してください。
+WindowsのWinUSB設定は [Zadigのスクリーンショット入り手順書](winusb/ZADIG.md) を参照してください。
+機器の調査やPowerShellによる設定は [winusb/README.md](winusb/README.md) にまとめています。
 LinuxのヘッドレスChromeからRP-E11への実データ送信を確認済みです。Windowsでの実行は未確認です。
 
 ## ディレクトリ構成

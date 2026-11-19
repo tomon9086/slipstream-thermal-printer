@@ -1,6 +1,9 @@
 # WindowsのWebUSB用ドライバー設定
 
-共通PowerShellと機種別JSONで、対象USBインターフェースをWinUSBへ変更します。
+対象USBインターフェースをWinUSBへ変更するための手順と、機器調査・設定用のPowerShellをまとめています。
+**まずは[スクリーンショット入りのZadig手順書](ZADIG.md)を使ってください。**
+Zadigは公式の実行ファイルを起動して設定でき、`wdi-simple.exe`のビルドは不要です。
+共通PowerShellと機種別JSONによる自動設定も利用できます。
 最初のプロファイルはSII RP-E11（今回の個体で観測したVID `0619` / PID `0123`）です。
 通常のWindowsプリンタードライバーによる印刷との共用は想定しません。
 このツールはUSBの割り当てだけを扱い、ブラウザの許可や印刷コマンドの機種対応は変更しません。
@@ -8,8 +11,9 @@
 ## 必要な環境
 
 - Windows 10/11、Windows PowerShell 5.1またはPowerShell 7。`PnpDevice`モジュールが必要です。
-- `Install`では管理者権限。昇格や実行ポリシーの変更はスクリプトから行いません。
-- `Install`では、信頼できるソースからビルドした**libwdiの`wdi-simple.exe`**。
+- GUIでの設定には[Zadig](https://zadig.akeo.ie/)と管理者権限が必要です。
+- PowerShellの`Install`では管理者権限。昇格や実行ポリシーの変更はスクリプトから行いません。
+- PowerShellの`Install`では、信頼できるソースからビルドした**libwdiの`wdi-simple.exe`**。
   機器調査・`Inspect`・`Verify`・`Install -WhatIf`では実行ファイルは不要です。
 
 ## IDが分からない機器を調査する
@@ -54,6 +58,9 @@ MIがない場合は、メーカー資料やUSB記述子を表示するツール
 
 ## WinUSB導入用CLIの用意
 
+この節はPowerShellの`-Action Install`で自動設定したい場合だけ必要です。
+[Zadigで手動設定する場合](ZADIG.md)は読み飛ばしてください。
+
 `wdi-simple`はZadigと同じlibwdiを使う公式CLIサンプルです。Windows標準コマンドではありません。
 確認したlibwdi v1.5.1の公式リリース添付はZadigのみで、CLIの実行ファイルは含まれません。
 `zadig.exe`をリネームしても利用できません。本リポジトリは外部EXEを同梱・自動取得しません。
@@ -70,7 +77,7 @@ libwdiは生成したドライバーパッケージにローカルの証明書�
 よっては導入できません。署名検証を無効化する処理は含めていません。
 大量配布向けの署名済みパッケージや、第三者EXEの再配布はこの変更には含めません。
 
-## 使い方
+## PowerShellによる設定の使い方
 
 以下はリポジトリルートで実行します。対象プリンターは1台だけ接続してください。
 
