@@ -189,6 +189,9 @@ Web版の黒帯幅判定（開始時以外は4〜10mm）とカット補正の条
 
 ## Windowsの準備
 
+[Zadigのスクリーンショット入り手順書](../winusb/ZADIG.md)に沿って設定できます。`wdi-simple.exe`は不要です。
+PowerShellによる機器調査・検証・自動設定は [WinUSB設定ツール](../winusb/README.md) を参照してください。
+
 RP-E11の対象USBインターフェースをZadig等でWinUSBへ割り当てます。
 USB IDを確認して、別のUSB機器を選ばないでください。WinUSBへ変更したRP-E11は
 通常のプリンタードライバーによる印刷との共用を想定しません。

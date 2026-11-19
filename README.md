@@ -4,6 +4,8 @@
 レシートプリンターをハックする
 
 ブラウザからUSBへ直接送る検証用Next.jsアプリは [web/README.md](web/README.md) を参照してください。
+WindowsのWinUSB設定は [Zadigのスクリーンショット入り手順書](winusb/ZADIG.md) を参照してください。
+機器の調査やPowerShellによる設定は [winusb/README.md](winusb/README.md) にまとめています。
 LinuxのヘッドレスChromeからRP-E11への実データ送信を確認済みです。Windowsでの実行は未確認です。
 
 ## ディレクトリ構成
@@ -11,6 +13,7 @@ LinuxのヘッドレスChromeからRP-E11への実データ送信を確認済み
 ```text
 cli/                 Node.js CLI・印刷データ生成・USB通信・テスト
 web/                 Next.js WebUSB検証アプリ・ブラウザテスト
+winusb/              Windows用WinUSB設定スクリプト・機種別プロファイル
 examples/            共通の原稿・画像サンプル
 README.md            全体の使い方
 CONNECTION.md        RP-E11の接続情報・実機の知見
