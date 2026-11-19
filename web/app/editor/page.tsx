@@ -6,7 +6,7 @@ import { AddressLabel } from '@/components/address-label';
 import { initialLabel, labelSize, layoutErrors, type LabelDraft } from '@/lib/label';
 import { useRasterPreview } from '@/lib/use-raster-preview';
 import { closePrinter, connectPrinter, type PrinterSession } from '@/lib/printer';
-import { DEFAULT_MARK_SEARCH_LIMIT_MM, printOptionError, printRasterLabel, type PrintLabelOptions } from '@/lib/print-label';
+import { DEFAULT_MARK_SEARCH_LIMIT, printOptionError, printRasterLabel, type PrintLabelOptions } from '@/lib/print-label';
 import styles from './page.module.css';
 
 const marginFields = [
@@ -25,7 +25,7 @@ export default function EditorPage() {
   const [ignorePaper, setIgnorePaper] = useState(false);
   const [copies, setCopies] = useState(1);
   const [cutAdjust, setCutAdjust] = useState(-1.5);
-  const [markSearchLimitMm, setMarkSearchLimitMm] = useState(DEFAULT_MARK_SEARCH_LIMIT_MM);
+  const [markSearchLimit, setMarkSearchLimit] = useState(DEFAULT_MARK_SEARCH_LIMIT);
   const [position, setPosition] = useState<'unknown' | 'after-cut'>('unknown');
   const [logs, setLogs] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -37,7 +37,7 @@ export default function EditorPage() {
   const displayedRaster = warnings.length || preview.error ? null : raster ?? preview.previousRaster;
   const size = labelSize(draft);
   const options: PrintLabelOptions = { paperWidth: draft.paperWidth, marked, cut, ignorePaper, copies,
-    cutAdjustMm: cutAdjust, position, markSearchLimitMm };
+    cutAdjustMm: cutAdjust, position, markSearchLimit };
   const optionError = printOptionError(size.height, options);
   const log = (message: string) => setLogs(previous => [...previous.slice(-99), `${new Date().toLocaleTimeString('ja-JP')}  ${message}`]);
 
@@ -230,8 +230,8 @@ export default function EditorPage() {
             <details className={styles.advanced}><summary>印刷の詳細設定</summary>
               {marked && <>
                 <label>黒帯の探索上限（mm）<input type="number" min={1} step={1}
-                  value={Number.isFinite(markSearchLimitMm) ? markSearchLimitMm : ''}
-                  onChange={event => setMarkSearchLimitMm(event.target.valueAsNumber)} /></label>
+                  value={Number.isFinite(markSearchLimit) ? markSearchLimit : ''}
+                  onChange={event => setMarkSearchLimit(event.target.valueAsNumber)} /></label>
                 <p className={styles.hint}>1回の探索で送る最大距離です。用紙に合わせて1mm単位で指定します。見つからない場合はカットせず停止します。探索中は左端に細い印が付きます。</p>
                 <label>カット位置の補正（mm）<input type="number" min={-5} max={5} step={0.125} value={cutAdjust}
                   onChange={event => { setCutAdjust(Number(event.target.value)); setPosition('unknown'); }} /></label>

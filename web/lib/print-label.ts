@@ -3,11 +3,11 @@ import { labelWidth, rasterBytes, type RasterLabel } from './label';
 
 type Reply = { kind: 'hex'; data: Uint8Array } | { kind: 'status' | 'execution'; value: number };
 type Position = 'unknown' | 'after-cut';
-export const DEFAULT_MARK_SEARCH_LIMIT_MM = 60;
+export const DEFAULT_MARK_SEARCH_LIMIT = 60;
 export type PrintLabelOptions = {
   paperWidth: 58 | 80; marked: boolean; cut: boolean; ignorePaper: boolean;
   position: Position; cutAdjustMm: number; copies: number;
-  markSearchLimitMm?: number;
+  markSearchLimit?: number;
 };
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // 同じ接続でジョブを続けて実行した場合も、カット間隔を維持する。
@@ -104,7 +104,7 @@ class Sii {
 export function printOptionError(height: number, options: PrintLabelOptions): string | null {
   if (!Number.isInteger(options.copies) || options.copies < 1 || options.copies > 10) return '枚数は1〜10枚で指定してください。';
   if (!Number.isFinite(options.cutAdjustMm) || Math.abs(options.cutAdjustMm) > 5) return 'カット補正は−5〜5mmです。';
-  const searchLimitMm = options.markSearchLimitMm ?? DEFAULT_MARK_SEARCH_LIMIT_MM;
+  const searchLimitMm = options.markSearchLimit ?? DEFAULT_MARK_SEARCH_LIMIT;
   if (options.marked && (searchLimitMm < 1 || !Number.isSafeInteger(searchLimitMm) || !Number.isSafeInteger(searchLimitMm * 8))) {
     return '黒帯の探索上限は1mm以上の整数で指定してください。';
   }
@@ -157,7 +157,7 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
   for (let y = 0; y < 7; y++) probe[8 + y * rowBytes] = 0x80;
   probe.set([0x1b, 0x4a, 1], probe.length - 3);
   const seek = async () => {
-    const searchLimitMm = options.markSearchLimitMm ?? DEFAULT_MARK_SEARCH_LIMIT_MM;
+    const searchLimitMm = options.markSearchLimit ?? DEFAULT_MARK_SEARCH_LIMIT;
     const searchLimitDots = searchLimitMm * 8;
     let leading = -1;
     for (let dots = 0; dots <= searchLimitDots; dots += 8) {
