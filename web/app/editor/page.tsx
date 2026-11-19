@@ -6,7 +6,7 @@ import { AddressLabel } from '@/components/address-label';
 import { initialLabel, labelSize, layoutErrors, type LabelDraft } from '@/lib/label';
 import { useRasterPreview } from '@/lib/use-raster-preview';
 import { closePrinter, connectPrinter, type PrinterSession } from '@/lib/printer';
-import { printOptionError, printRasterLabel, type PrintLabelOptions } from '@/lib/print-label';
+import { DEFAULT_MARK_SEARCH_LIMIT_MM, printOptionError, printRasterLabel, type PrintLabelOptions } from '@/lib/print-label';
 import styles from './page.module.css';
 
 const marginFields = [
@@ -20,11 +20,12 @@ export default function EditorPage() {
   const [notice, setNotice] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
   const [connected, setConnected] = useState(false);
-  const [marked, setMarked] = useState(true);
+  const [marked, setMarked] = useState(false);
   const [cut, setCut] = useState(true);
   const [ignorePaper, setIgnorePaper] = useState(false);
   const [copies, setCopies] = useState(1);
   const [cutAdjust, setCutAdjust] = useState(-1.5);
+  const [markSearchLimitMm, setMarkSearchLimitMm] = useState(DEFAULT_MARK_SEARCH_LIMIT_MM);
   const [position, setPosition] = useState<'unknown' | 'after-cut'>('unknown');
   const [logs, setLogs] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -36,7 +37,7 @@ export default function EditorPage() {
   const displayedRaster = warnings.length || preview.error ? null : raster ?? preview.previousRaster;
   const size = labelSize(draft);
   const options: PrintLabelOptions = { paperWidth: draft.paperWidth, marked, cut, ignorePaper, copies,
-    cutAdjustMm: cutAdjust, position };
+    cutAdjustMm: cutAdjust, position, markSearchLimitMm };
   const optionError = printOptionError(size.height, options);
   const log = (message: string) => setLogs(previous => [...previous.slice(-99), `${new Date().toLocaleTimeString('ja-JP')}  ${message}`]);
 
@@ -212,7 +213,7 @@ export default function EditorPage() {
           <fieldset disabled={busy} className={styles.fieldset}>
             <div className={styles.twoColumns}>
               <label>用紙の種類<select value={marked ? 'marked' : 'roll'} onChange={event => { setMarked(event.target.value === 'marked'); setPosition('unknown'); }}>
-                <option value="marked">ブラックマーク付き（49mmピッチ）</option><option value="roll">通常ロール</option>
+                <option value="roll">通常ロール</option><option value="marked">ブラックマーク付き（49mmピッチ）</option>
               </select></label>
               <label>枚数<select value={copies} onChange={event => setCopies(Number(event.target.value))}>
                 {[1, 2, 3, 5, 10].map(number => <option key={number} value={number}>{number}枚</option>)}
@@ -227,10 +228,16 @@ export default function EditorPage() {
               : '位置が不明な最初の1枚には、画像の上余白に加えて約12mmの余白が付きます。カット後の次の紙は9.25mm戻して余白を減らします。'}</p>}
             <button className={styles.textButton} type="button" onClick={() => { setPosition('unknown'); setNotice(marked ? '次回印刷時に頭出しします。' : '用紙位置を不明に戻しました。次回の最初の1枚は逆送りしません。'); }}>紙を交換・手動で動かした</button>
             <details className={styles.advanced}><summary>印刷の詳細設定</summary>
-              {marked && <label>カット位置の補正（mm）<input type="number" min={-5} max={5} step={0.125} value={cutAdjust}
-                onChange={event => { setCutAdjust(Number(event.target.value)); setPosition('unknown'); }} /></label>}
+              {marked && <>
+                <label>黒帯の探索上限（mm）<input type="number" min={1} step={1}
+                  value={Number.isFinite(markSearchLimitMm) ? markSearchLimitMm : ''}
+                  onChange={event => setMarkSearchLimitMm(event.target.valueAsNumber)} /></label>
+                <p className={styles.hint}>1回の探索で送る最大距離です。用紙に合わせて1mm単位で指定します。見つからない場合はカットせず停止します。探索中は左端に細い印が付きます。</p>
+                <label>カット位置の補正（mm）<input type="number" min={-5} max={5} step={0.125} value={cutAdjust}
+                  onChange={event => { setCutAdjust(Number(event.target.value)); setPosition('unknown'); }} /></label>
+              </>}
               <label className={styles.toggle}><input type="checkbox" checked={ignorePaper} onChange={event => setIgnorePaper(event.target.checked)} />紙を確認済み：この個体の状態ビット0x20を無視</label>
-              <p className={styles.hint}>マーク紙は手作り紙で確認した設定です。用紙交換・再接続後は頭出しします。画像・カットの完了応答まで確認し、失敗時は自動再送しません。</p>
+              <p className={styles.hint}>用紙交換・再接続後は頭出しします。画像・カットの完了応答まで確認し、失敗時は自動再送しません。</p>
             </details>
           </fieldset>
           {optionError && <p className={styles.warning}>{optionError}</p>}

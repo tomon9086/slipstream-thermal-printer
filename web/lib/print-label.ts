@@ -3,9 +3,11 @@ import { labelWidth, rasterBytes, type RasterLabel } from './label';
 
 type Reply = { kind: 'hex'; data: Uint8Array } | { kind: 'status' | 'execution'; value: number };
 type Position = 'unknown' | 'after-cut';
+export const DEFAULT_MARK_SEARCH_LIMIT_MM = 60;
 export type PrintLabelOptions = {
   paperWidth: 58 | 80; marked: boolean; cut: boolean; ignorePaper: boolean;
   position: Position; cutAdjustMm: number; copies: number;
+  markSearchLimitMm?: number;
 };
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // 同じ接続でジョブを続けて実行した場合も、カット間隔を維持する。
@@ -102,6 +104,10 @@ class Sii {
 export function printOptionError(height: number, options: PrintLabelOptions): string | null {
   if (!Number.isInteger(options.copies) || options.copies < 1 || options.copies > 10) return '枚数は1〜10枚で指定してください。';
   if (!Number.isFinite(options.cutAdjustMm) || Math.abs(options.cutAdjustMm) > 5) return 'カット補正は−5〜5mmです。';
+  const searchLimitMm = options.markSearchLimitMm ?? DEFAULT_MARK_SEARCH_LIMIT_MM;
+  if (options.marked && (searchLimitMm < 1 || !Number.isSafeInteger(searchLimitMm) || !Number.isSafeInteger(searchLimitMm * 8))) {
+    return '黒帯の探索上限は1mm以上の整数で指定してください。';
+  }
   if (options.marked && height > 320) return '49mmピッチのマーク紙では、印刷高さを40mm以下にしてください。';
   const reverse = 117 + Math.round(options.cutAdjustMm * 8) + 8 - 44;
   if (options.marked && (reverse < 0 || reverse > 74)) return 'カット後の戻し量が本体の上限9.25mmを超えます。補正値を見直してください。';
@@ -151,8 +157,10 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
   for (let y = 0; y < 7; y++) probe[8 + y * rowBytes] = 0x80;
   probe.set([0x1b, 0x4a, 1], probe.length - 3);
   const seek = async () => {
+    const searchLimitMm = options.markSearchLimitMm ?? DEFAULT_MARK_SEARCH_LIMIT_MM;
+    const searchLimitDots = searchLimitMm * 8;
     let leading = -1;
-    for (let dots = 0; dots <= 480; dots += 8) {
+    for (let dots = 0; dots <= searchLimitDots; dots += 8) {
       const black = await sii.ready();
       if (black && leading < 0) leading = dots;
       if (!black && leading >= 0) {
@@ -160,9 +168,9 @@ export async function printRasterLabel(session: PrinterSession, raster: RasterLa
         log(`黒帯終端を${dots / 8}mmで検出`);
         return dots;
       }
-      if (dots < 480) { await sii.execute(probe); await pause(20); }
+      if (dots < searchLimitDots) { await sii.execute(probe); await pause(20); }
     }
-    throw new Error('60mm以内に黒帯を検出できませんでした。カットせず停止しました。');
+    throw new Error(`${searchLimitMm}mm以内に黒帯を検出できませんでした。カットせず停止しました。`);
   };
   try {
     const expected = original.slice();
