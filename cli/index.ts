@@ -7,6 +7,7 @@ import { sendToPrinter, withPrinter } from './src/usb.ts';
 import { paperLayout } from './src/paper.ts';
 import { inspectBlackMark, feedToMark, markAlignmentBytes, markedJobBytes, printMarkedJob, withPaperWidth } from './src/black-mark.ts';
 import type { MarkedJob } from './src/black-mark.ts';
+import { inspectPaperSetHandle, parsePaperSetMode, setPaperSetHandle } from './src/paper-set.ts';
 
 const help = `使い方: pnpm run print <command> [file] [options]
 実行例:
@@ -15,6 +16,8 @@ const help = `使い方: pnpm run print <command> [file] [options]
   入出力ファイルの相対パスは、実行時の作業ディレクトリを基準に解決します。
 コマンド:
   status                 印刷せずにUSBステータスを取得
+  paper-set [mode]       紙セット後の動作を確認・変更（省略時はstatus）
+                         mode: status / off / initial-cut / stamp-cut
   mark-status            マーク紙モードとセンサー状態を取得（紙送りなし）
   mark-feed              マーク紙の印字開始位置へ合わせる（MS1-3の有効化が必要）
   samples                文字サイズ・日本語・内蔵QRの見本を印刷
@@ -33,6 +36,7 @@ const help = `使い方: pnpm run print <command> [file] [options]
   --cut                  印刷後にカット（receipt/imageのみ）
                          省略時: 通常印刷はカットあり、マーク印刷はカットなし
   --section <section>    見本: all（初期値）またはjapanese-qr（samplesのみ）
+  --save                 paper-setの変更を本体FLASHへ保存（省略時はRAMのみ）
   --help                 このヘルプを表示`;
 
 async function main() {
@@ -42,20 +46,33 @@ async function main() {
     'paper-width': { type: 'string' }, section: { type: 'string' },
     'black-mark': { type: 'boolean' }, cut: { type: 'boolean' },
     'mark-offset': { type: 'string' },
+    save: { type: 'boolean' },
     help: { type: 'boolean' },
   } });
   if (values.help || positionals.length === 0) { console.log(help); return; }
   const [command, file] = positionals;
   const needsFile = ['receipt', 'image', 'raw'].includes(command);
-  if (!['status', 'mark-status', 'mark-feed', 'samples', 'receipt', 'image', 'raw'].includes(command)
-      || positionals.length !== (needsFile ? 2 : 1)) throw new Error(help);
+  const isPaperSet = command === 'paper-set';
+  if (!['status', 'mark-status', 'mark-feed', 'samples', 'receipt', 'image', 'raw', 'paper-set'].includes(command)
+      || (isPaperSet ? positionals.length > 2 : positionals.length !== (needsFile ? 2 : 1))) throw new Error(help);
   for (const [option, valid] of [['preview', command === 'receipt'],
     ['paper-width', ['receipt', 'image', 'mark-feed'].includes(command)],
     ['black-mark', command === 'receipt' || command === 'image'],
     ['mark-offset', command === 'mark-feed' || Boolean(values['black-mark'])],
     ['cut', command === 'receipt' || command === 'image'],
-    ['section', command === 'samples'], ['output', !['status', 'mark-status'].includes(command)]] as const) {
+    ['section', command === 'samples'], ['output', !['status', 'mark-status', 'paper-set'].includes(command)],
+    ['save', isPaperSet && file !== undefined && file !== 'status']] as const) {
     if (values[option] !== undefined && !valid) throw new Error(`--${option} is not valid for ${command}`);
+  }
+  if (isPaperSet) {
+    if (values['dry-run'] || values['ignore-paper-status'] !== undefined) {
+      throw new Error('paper-set requires a USB connection; --dry-run and --ignore-paper-status are not supported');
+    }
+    const mode = file === undefined || file === 'status' ? undefined : parsePaperSetMode(file);
+    const result = await withPrinter(async io => mode === undefined
+      ? inspectPaperSetHandle(io) : setPaperSetHandle(io, mode, values.save), { statusOnly: true });
+    console.log(JSON.stringify(result, null, 2));
+    return;
   }
   const paperWidth = Number(values['paper-width'] ?? 58);
   paperLayout(paperWidth);

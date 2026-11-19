@@ -66,7 +66,7 @@ export class SiiReplyDecoder {
   }
 }
 
-class SiiClient {
+export class SiiClient {
   private decoder = new SiiReplyDecoder();
   private replies: Reply[] = [];
   private tag = 0;

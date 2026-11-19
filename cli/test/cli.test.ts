@@ -11,6 +11,26 @@ function cli(...args: string[]) {
   return spawnSync(process.execPath, ['cli/index.ts', ...args], { cwd: root, encoding: 'utf8' });
 }
 
+test('紙セット設定の不正なモード・保存指定・印刷オプションはUSB接続前に拒否する', () => {
+  const help = cli('--help');
+  assert.match(help.stdout, /paper-set/);
+  assert.match(help.stdout, /--save/);
+  for (const args of [
+    ['paper-set', 'invalid'], ['paper-set', 'off', 'extra'],
+    ['paper-set', '--save'], ['paper-set', 'status', '--save'],
+    ['paper-set', 'off', '--dry-run'], ['paper-set', '--dry-run'],
+    ['paper-set', 'off', '--output=/tmp/unused-paper-set.bin'],
+    ['paper-set', 'off', '--paper-width=80'], ['paper-set', 'off', '--cut'],
+    ['paper-set', 'off', '--black-mark'], ['paper-set', 'off', '--section=all'],
+    ['paper-set', 'off', '--ignore-paper-status'], ['status', '--save'],
+    ['receipt', 'examples/demo.receipt', '--save', '--dry-run'],
+  ]) {
+    const result = cli(...args);
+    assert.equal(result.status, 1, args.join(' '));
+    assert.ok(!result.stdout.includes('Connected'), args.join(' '));
+  }
+});
+
 test('CLIは両方の紙幅に対応し、USBに接続せず指定幅でプレビューを保存する', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'slipstream-cli-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
